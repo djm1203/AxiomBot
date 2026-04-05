@@ -74,7 +74,7 @@ public abstract class BotScript
      * Called by ScriptRunner to inject all dependencies before onStart().
      * Scripts never call this directly.
      */
-    final void inject(
+    public final void inject(
         Client client,
         Players players,
         Npcs npcs,
