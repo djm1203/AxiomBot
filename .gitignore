@@ -36,3 +36,4 @@ logs/
 # RuneLite dev artifacts
 jagex_cl_oldschool_LIVE
 random.dat
+.claude/
