@@ -2,6 +2,7 @@ package com.botengine.osrs.util;
 
 import lombok.Setter;
 import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.MessageFormatter;
 
 /**
  * Unified logging wrapper for the bot engine.
@@ -9,15 +10,13 @@ import org.slf4j.LoggerFactory;
  * Prefixes every message with [BotEngine] and optionally the active script name
  * so logs are easy to filter and identify in the RuneLite console.
  *
+ * Supports SLF4J-style parameterized messages:
+ *   log.info("Walking to {} at ({}, {})", "oaks", x, y);
+ *
  * Example output:
  *   [BotEngine] [Woodcutting] Walking to oak trees at (3053, 3247)
  *   [BotEngine] [Woodcutting] Tree depleted — finding next target
  *   [BotEngine] Break started — resuming in 8 minutes
- *
- * Usage in a script:
- *   log.info("Starting woodcutting session");
- *   log.warn("No trees found within range");
- *   log.debug("Animation ID: " + animId);
  */
 public class Log
 {
@@ -30,24 +29,24 @@ public class Log
 
     // ── Logging methods ───────────────────────────────────────────────────────
 
-    public void info(String message)
+    public void info(String message, Object... args)
     {
-        logger.info(prefix(message));
+        logger.info(prefix(format(message, args)));
     }
 
-    public void warn(String message)
+    public void warn(String message, Object... args)
     {
-        logger.warn(prefix(message));
+        logger.warn(prefix(format(message, args)));
     }
 
-    public void debug(String message)
+    public void debug(String message, Object... args)
     {
-        logger.debug(prefix(message));
+        logger.debug(prefix(format(message, args)));
     }
 
-    public void error(String message)
+    public void error(String message, Object... args)
     {
-        logger.error(prefix(message));
+        logger.error(prefix(format(message, args)));
     }
 
     public void error(String message, Throwable t)
@@ -56,6 +55,12 @@ public class Log
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────
+
+    private String format(String message, Object... args)
+    {
+        if (args == null || args.length == 0) return message;
+        return MessageFormatter.arrayFormat(message, args).getMessage();
+    }
 
     private String prefix(String message)
     {

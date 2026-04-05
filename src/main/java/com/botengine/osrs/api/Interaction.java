@@ -180,6 +180,82 @@ public class Interaction
         );
     }
 
+    // ── Inventory items ───────────────────────────────────────────────────────
+
+    /**
+     * Clicks an inventory item by item ID (e.g. "Drop", "Eat", "Wield").
+     * Finds the first slot containing the item and fires CC_OP.
+     *
+     * @param itemId the item to click
+     * @param action the option text (e.g. "Drop", "Eat")
+     */
+    public void clickInventoryItem(int itemId, String action)
+    {
+        net.runelite.api.ItemContainer inv =
+            client.getItemContainer(net.runelite.api.InventoryID.INVENTORY);
+        if (inv == null) return;
+
+        net.runelite.api.Item[] items = inv.getItems();
+        for (int slot = 0; slot < items.length; slot++)
+        {
+            if (items[slot] != null && items[slot].getId() == itemId)
+            {
+                log.debug("clickInventoryItem id={} slot={} action='{}'", itemId, slot, action);
+                client.menuAction(
+                    slot, net.runelite.api.widgets.WidgetInfo.INVENTORY.getId(),
+                    MenuAction.CC_OP,
+                    7,   // slot 7 = "Drop" in default inventory context menu
+                    itemId,
+                    action,
+                    ""
+                );
+                return;
+            }
+        }
+        log.warn("clickInventoryItem: item id={} not found in inventory", itemId);
+    }
+
+    /**
+     * Uses one inventory item on another inventory item.
+     * Fires ITEM_USE on slot1 then ITEM_USE_ON_WIDGET on slot2.
+     * Used to open production dialogues (chisel+gem, knife+log, etc.)
+     *
+     * @param slot1 inventory slot of the tool/resource to use
+     * @param slot2 inventory slot of the target item
+     */
+    public void useItemOnItem(int slot1, int slot2)
+    {
+        int widgetId = net.runelite.api.widgets.WidgetInfo.INVENTORY.getId();
+
+        log.debug("useItemOnItem slot1={} slot2={}", slot1, slot2);
+
+        // Step 1: activate the first item (ITEM_USE)
+        net.runelite.api.ItemContainer inv =
+            client.getItemContainer(net.runelite.api.InventoryID.INVENTORY);
+        if (inv == null) return;
+        int item1Id = inv.getItems()[slot1].getId();
+
+        client.menuAction(
+            slot1, widgetId,
+            MenuAction.ITEM_USE,
+            item1Id,
+            -1,
+            "Use",
+            ""
+        );
+
+        // Step 2: use on second item (WIDGET_TARGET_ON_WIDGET)
+        int item2Id = inv.getItems()[slot2].getId();
+        client.menuAction(
+            slot2, widgetId,
+            MenuAction.WIDGET_TARGET_ON_WIDGET,
+            item2Id,
+            -1,
+            "Use",
+            ""
+        );
+    }
+
     // ── Use-item-on-object ────────────────────────────────────────────────────
 
     /**
