@@ -29,6 +29,9 @@ public class Antiban
 {
     private static final Random random = new Random();
 
+    /** Per-run random seed in range [0.85, 1.15] — varies timing slightly between sessions. */
+    private final double accountSeed = 0.85 + Math.random() * 0.30;
+
     // ── Configuration (set by BotEngineConfig) ────────────────────────────────
 
     /** Average minutes between breaks. Default: 45 minutes. */
@@ -117,21 +120,38 @@ public class Antiban
     // ── Delay utilities ───────────────────────────────────────────────────────
 
     /**
+     * Returns a delay multiplier based on elapsed session time.
+     * Models human fatigue: delays gradually increase over a long session.
+     *   0–30 min  → 1.00  (fresh)
+     *   30–60 min → 1.00–1.08
+     *   60–120 min → 1.08–1.20
+     *   120+ min  → 1.20–1.30 (tired, capped)
+     */
+    public double fatigueFactor()
+    {
+        long elapsedMin = sessionElapsedMs() / 60_000;
+        if (elapsedMin <= 30)  return 1.0;
+        if (elapsedMin <= 60)  return 1.0  + (elapsedMin - 30)  / 30.0 * 0.08;
+        if (elapsedMin <= 120) return 1.08 + (elapsedMin - 60)  / 60.0 * 0.12;
+        return 1.30;
+    }
+
+    /**
      * Returns a delay in milliseconds sampled from a Gaussian distribution.
      * Useful for action-to-action delays that should feel human.
      *
      * @param meanMs   target delay in milliseconds (e.g. 650 for ~1 tick)
      * @param stdDevMs standard deviation (e.g. 80 for natural variance)
-     * @return delay clamped to [meanMs * 0.4, meanMs * 2.0] to avoid extremes
+     * @return delay clamped to [meanMs * 0.4, meanMs * 2.5] to avoid extremes
      *
      * Example:
      *   time.sleep(antiban.gaussianDelay(650, 80)); // ~1 tick with variance
      */
     public long gaussianDelay(long meanMs, long stdDevMs)
     {
-        long delay = meanMs + (long) (random.nextGaussian() * stdDevMs);
+        long delay = (long) (meanMs * accountSeed) + (long) (random.nextGaussian() * stdDevMs);
         long min = (long) (meanMs * 0.4);
-        long max = (long) (meanMs * 2.0);
+        long max = (long) (meanMs * 2.5);
         return Math.max(min, Math.min(max, delay));
     }
 
@@ -148,11 +168,16 @@ public class Antiban
     /**
      * Returns a random reaction time delay simulating human perception latency.
      * Sampled from a realistic range of 80–220ms with Gaussian distribution.
+     * Applies both account seed and fatigue factor for realistic variation.
      */
     public long reactionDelay()
     {
-        return gaussianDelay(150, 40);
+        double multiplier = accountSeed * fatigueFactor();
+        return (long) (gaussianDelay(150, 40) * multiplier);
     }
+
+    /** Returns this session's account seed (range 0.85–1.15). */
+    public double getAccountSeed() { return accountSeed; }
 
     // ── Mouse jitter ─────────────────────────────────────────────────────────
 

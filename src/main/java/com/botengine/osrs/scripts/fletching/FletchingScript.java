@@ -27,12 +27,19 @@ public class FletchingScript extends BotScript
     private static final int[] UNSTRUNG_BOW_IDS = {
         50, 48, 54, 58, 62, 66, 52, 56, 60, 64, 68
     };
+    private static final int[] DART_TIP_IDS = {
+        819, 820, 821, 822, 823, 824, 3093, 11232 // bronze through dragon + black + dragon
+    };
+    private static final int[] BOLT_TIP_IDS = {
+        9375, 9376, 9377, 9378, 9379, 9380, 9381 // opal through dragonstone bolt tips
+    };
+    private static final int FEATHER_ID = 314;
 
     private static final int MAKE_ALL_WIDGET =
         net.runelite.api.widgets.WidgetUtil.packComponentId(270, 14);
 
     private enum State  { DETECT, FLETCHING, WAIT_DIALOGUE, IN_PROGRESS, BANKING, DONE }
-    private enum Mode   { KNIFE, STRING, UNKNOWN }
+    private enum Mode   { KNIFE, STRING, DARTS, BOLTS, UNKNOWN }
 
     private State state = State.DETECT;
     private Mode  mode  = Mode.UNKNOWN;
@@ -93,6 +100,18 @@ public class FletchingScript extends BotScript
             log.info("Mode: stringing (attaching bow strings)");
             state = State.FLETCHING;
         }
+        else if (inventory.contains(FEATHER_ID) && findDartTip() != -1)
+        {
+            mode = Mode.DARTS;
+            log.info("Mode: darts (combining dart tips + feathers)");
+            state = State.FLETCHING;
+        }
+        else if (inventory.contains(FEATHER_ID) && findBoltTip() != -1)
+        {
+            mode = Mode.BOLTS;
+            log.info("Mode: bolts (combining bolt tips + feathers)");
+            state = State.FLETCHING;
+        }
         else
         {
             if (bankingMode) { state = State.BANKING; return; }
@@ -103,6 +122,21 @@ public class FletchingScript extends BotScript
 
     private void startFletching()
     {
+        if (mode == Mode.DARTS || mode == Mode.BOLTS)
+        {
+            int tipId = (mode == Mode.DARTS) ? findDartTip() : findBoltTip();
+            if (tipId == -1) { state = bankingMode ? State.BANKING : State.DONE; return; }
+            int featherSlot = inventory.getSlot(FEATHER_ID);
+            int tipSlot     = inventory.getSlot(tipId);
+            if (featherSlot == -1 || tipSlot == -1) return;
+            // No dialogue — combines immediately each tick
+            interaction.useItemOnItem(featherSlot, tipSlot);
+            antiban.reactionDelay();
+            state = State.IN_PROGRESS; // will check progress next tick
+            ticksWaited = 0;
+            return;
+        }
+
         int slot1, slot2;
         if (mode == Mode.KNIFE)
         {
@@ -141,7 +175,15 @@ public class FletchingScript extends BotScript
 
     private void checkProgress()
     {
-        boolean hasWork = mode == Mode.KNIFE ? findLog() != -1 : findUnstrungBow() != -1;
+        boolean hasWork;
+        switch (mode)
+        {
+            case KNIFE:  hasWork = findLog() != -1;         break;
+            case STRING: hasWork = findUnstrungBow() != -1; break;
+            case DARTS:  hasWork = findDartTip() != -1;     break;
+            case BOLTS:  hasWork = findBoltTip() != -1;     break;
+            default:     hasWork = false;
+        }
         if (!hasWork) { state = bankingMode ? State.BANKING : State.DONE; return; }
         if (players.isIdle()) { antiban.randomDelay(300, 700); state = State.FLETCHING; }
     }
@@ -156,10 +198,20 @@ public class FletchingScript extends BotScript
             {
                 for (int id : LOG_IDS) { if (bank.contains(id)) { bank.withdraw(id, Integer.MAX_VALUE); break; } }
             }
-            else
+            else if (mode == Mode.STRING)
             {
                 for (int id : UNSTRUNG_BOW_IDS) { if (bank.contains(id)) { bank.withdraw(id, Integer.MAX_VALUE); break; } }
                 if (bank.contains(BOW_STRING_ID)) bank.withdraw(BOW_STRING_ID, Integer.MAX_VALUE);
+            }
+            else if (mode == Mode.DARTS)
+            {
+                for (int id : DART_TIP_IDS) { if (bank.contains(id)) { bank.withdraw(id, Integer.MAX_VALUE); break; } }
+                if (bank.contains(FEATHER_ID)) bank.withdraw(FEATHER_ID, Integer.MAX_VALUE);
+            }
+            else if (mode == Mode.BOLTS)
+            {
+                for (int id : BOLT_TIP_IDS) { if (bank.contains(id)) { bank.withdraw(id, Integer.MAX_VALUE); break; } }
+                if (bank.contains(FEATHER_ID)) bank.withdraw(FEATHER_ID, Integer.MAX_VALUE);
             }
             antiban.reactionDelay();
             bank.close();
@@ -182,6 +234,18 @@ public class FletchingScript extends BotScript
     private int findUnstrungBow()
     {
         for (int id : UNSTRUNG_BOW_IDS) { if (inventory.contains(id)) return id; }
+        return -1;
+    }
+
+    private int findDartTip()
+    {
+        for (int id : DART_TIP_IDS) { if (inventory.contains(id)) return id; }
+        return -1;
+    }
+
+    private int findBoltTip()
+    {
+        for (int id : BOLT_TIP_IDS) { if (inventory.contains(id)) return id; }
         return -1;
     }
 }

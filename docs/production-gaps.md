@@ -17,10 +17,10 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 | Shift-click drop | ✅ | Mining + Fishing — dropAll() fires all drops in one pass |
 | Pathfinding | 🔲 | Obstacle-aware pathfinding (doors, ladders, agility shortcuts) |
 | Config persistence | 🔲 | Save/load JSON per-script profiles |
-| Progressive leveling | 🔲 | Auto-switch method when level threshold reached |
-| ABC2 antiban | 🔲 | Per-account unique behavior seeds, hover mechanics, fatigue curve |
+| Progressive leveling | ✅ | 'level:value,...' string config — woodcutting, mining, fishing |
+| ABC2 antiban | ✅ | Account seed (per-run timing variation) + fatigue curve (delays grow over session) |
 | Grand Exchange restocking | 🔲 | Auto-buy supplies when running low |
-| Emergency logout | 🔲 | Actual game logout on low HP/no food, not just script stop |
+| Emergency logout | ✅ | Logs out when HP critically low and no food — configurable threshold |
 
 ---
 
@@ -37,7 +37,7 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 | Banking loop | ✅ | Banks when inventory full, restocks food |
 | Cannon support | 🔲 | Place dwarf cannon, refill cannonballs, detect when empty |
 | Safe-spotting | 🔲 | Walk to safe tile, reposition if knocked out |
-| Position reset (Sand Crabs) | 🔲 | Detect dormant crabs, walk away and return |
+| Position reset (Sand Crabs) | ✅ | Detects passive crabs, walks 15 tiles away and returns to reset aggro |
 | Poison/venom detection | 🔲 | Drink antipoison/antivenom when status inflicted |
 | Superantifire detection | 🔲 | Equip/drink before fighting dragons |
 | Multiway zone detection | 🔲 | Handle multi-combat areas |
@@ -137,8 +137,8 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 |---|---|---|
 | Make-All dialog | ✅ | Handles production dialog |
 | Banking loop | ✅ | Restocks logs/strings/unstrung bows |
-| 1-tick fletching | 🔲 | Click item then immediately next — darts/bolts |
-| Darts/bolts method | 🔲 | Tips + feathers, 1-tick behavior |
+| 1-tick fletching | ✅ | Darts + bolts mode — useItemOnItem each tick, no dialogue wait |
+| Darts/bolts method | ✅ | Bronze through dragon dart tips + bolt tips, feathers auto-detected |
 | Inventory layout enforcement | 🔲 | Tips in slot 1, feathers in slot 2 for 1-tick |
 | Material quantity tracking | 🔲 | Count remaining tips/feathers, trigger bank early |
 
@@ -189,11 +189,12 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 7. ✅ **Combat: special attack**
 8. ✅ **Configurable alchemy item**
 9. ✅ **Bird nests** (Woodcutting)
-10. 🔲 **Progressive leveling** (all skills — reduces manual intervention)
+10. ✅ **Progressive leveling** (woodcutting, mining, fishing)
 11. 🔲 **Blast Furnace** (Smithing — best XP/GP method)
 12. 🔲 **Cannon support** (Combat)
-13. 🔲 **ABC2 antiban** (cross-cutting — behavior seeds, fatigue curve)
-14. 🔲 **Emergency logout** (cross-cutting)
-15. 🔲 **Sand Crabs position reset** (Combat)
-16. 🔲 **1-tick fletching** (Fletching)
+13. ✅ **ABC2 antiban** (account seed + fatigue curve)
+14. ✅ **Emergency logout** (Safety section in config)
+15. ✅ **Sand Crabs position reset** (Combat — sandCrabsMode config toggle)
+16. ✅ **1-tick fletching** (Fletching — darts + bolts auto-detected)
 17. 🔲 **Motherlode Mine** (Mining)
+18. 🔲 **Grand Exchange restocking** (cross-cutting)

@@ -222,4 +222,19 @@ public class Movement
     {
         return client.getEnergy() / 100;
     }
+
+    /**
+     * Logs out of the game by clicking the logout button widget.
+     * Use for emergency logout when the player is about to die.
+     * Interface 182 component 8 is the standard logout button in OSRS.
+     */
+    public void logout()
+    {
+        log.info("Logging out");
+        client.menuAction(
+            -1, net.runelite.api.widgets.WidgetUtil.packComponentId(182, 8),
+            net.runelite.api.MenuAction.CC_OP,
+            1, -1, "Logout", ""
+        );
+    }
 }

@@ -44,7 +44,7 @@ public class CombatScript extends BotScript
     private static final int IDLE_TIMEOUT_TICKS = 4;
     private static final int MAX_CAMERA_RETRIES  = 5;
 
-    private enum State { FIND_TARGET, ATTACKING, EATING, LOOTING, BANKING }
+    private enum State { FIND_TARGET, ATTACKING, EATING, LOOTING, BANKING, RESETTING }
 
     // ── Config values (set in configure()) ───────────────────────────────────
     private String  targetNpcName      = "Hill Giant";
@@ -58,6 +58,12 @@ public class CombatScript extends BotScript
     private boolean useSpec             = false;
     private int     specThreshold       = 100;
     private boolean bankingMode         = false;
+    private boolean emergencyLogout    = false;
+    private int     emergencyLogoutHp  = 10;
+    private boolean sandCrabsMode     = false;
+    private int     noTargetTickCount = 0;
+    private static final int PASSIVE_THRESHOLD = 10; // ticks before assuming passive
+    private WorldPoint resetTile; // set on first reset to avoid recalculating
 
     // ── Runtime state ─────────────────────────────────────────────────────────
     private State state = State.FIND_TARGET;
@@ -85,6 +91,9 @@ public class CombatScript extends BotScript
 
         protectivePrayer = parsePrayer(config.combatPrayerType(), Prayer.PROTECT_FROM_MELEE);
         offensivePrayer  = parsePrayer(config.combatOffensivePrayer(), null);
+        emergencyLogout   = config.emergencyLogoutEnabled();
+        emergencyLogoutHp = config.emergencyLogoutHpPercent();
+        sandCrabsMode = config.combatSandCrabsMode();
 
         lootItemIds.clear();
         for (String part : config.combatLootItemIds().split(","))
@@ -102,11 +111,23 @@ public class CombatScript extends BotScript
         state = State.FIND_TARGET;
         cameraRetryCount = 0;
         homeTile = players.getLocation();
+        noTargetTickCount = 0;
+        resetTile = null;
     }
 
     @Override
     public void onLoop()
     {
+        // Emergency logout — highest priority
+        if (emergencyLogout
+            && players.shouldEat(emergencyLogoutHp)
+            && !hasFood())
+        {
+            log.warn("EMERGENCY LOGOUT — HP critically low, no food");
+            movement.logout();
+            return;
+        }
+
         // Prayer pot drinking has highest priority — keeps prayer active
         if (usePrayer && prayers.shouldDrinkPotion(prayerPotPercent) && prayers.hasPotion())
         {
@@ -129,6 +150,7 @@ public class CombatScript extends BotScript
             case EATING:        state = State.FIND_TARGET; break;
             case LOOTING:       lootItems();        break;
             case BANKING:       handleBanking();    break;
+            case RESETTING:     resetAggro();       break;
         }
     }
 
@@ -152,7 +174,21 @@ public class CombatScript extends BotScript
         }
 
         NPC target = npcs.nearest(targetNpcName);
-        if (target == null || target.isDead()) return;
+        if (target == null || target.isDead())
+        {
+            if (sandCrabsMode)
+            {
+                noTargetTickCount++;
+                if (noTargetTickCount >= PASSIVE_THRESHOLD)
+                {
+                    log.info("Crabs appear passive — resetting aggro");
+                    state = State.RESETTING;
+                    noTargetTickCount = 0;
+                }
+            }
+            return;
+        }
+        noTargetTickCount = 0; // found a target — reset counter
 
         // Activate spec before attacking if threshold met
         if (useSpec && combat.canSpec(specThreshold) && !combat.isSpecActive())
@@ -269,6 +305,42 @@ public class CombatScript extends BotScript
         {
             // Walk toward home (nearest bank is near typical training spots)
             movement.walkTo(homeTile);
+        }
+    }
+
+    private void resetAggro()
+    {
+        // Walk ~15 tiles away from home tile to reset aggro, then return
+        if (resetTile == null)
+        {
+            // Pick a tile 15 steps north of home
+            resetTile = new WorldPoint(
+                homeTile.getX(),
+                homeTile.getY() + 15,
+                homeTile.getPlane()
+            );
+        }
+
+        int distToReset = players.distanceTo(resetTile);
+        int distToHome  = players.distanceTo(homeTile);
+
+        if (distToReset > 3)
+        {
+            // First leg: walk away
+            movement.walkTo(resetTile);
+        }
+        else if (distToHome > 3)
+        {
+            // Second leg: walk back
+            antiban.randomDelay(1000, 2000); // wait a moment before returning
+            movement.walkTo(homeTile);
+        }
+        else
+        {
+            // Back home — crabs should be aggressive again
+            log.info("Aggro reset complete");
+            resetTile = null;
+            state = State.FIND_TARGET;
         }
     }
 

@@ -182,6 +182,15 @@ public interface BotEngineConfig extends Config
     )
     default boolean combatBankingMode() { return false; }
 
+    @ConfigItem(
+        keyName = "combatSandCrabsMode",
+        name = "Sand Crabs mode",
+        description = "Walk away and return to reset crab aggro when crabs go passive",
+        section = combatSection,
+        position = 11
+    )
+    default boolean combatSandCrabsMode() { return false; }
+
     // ── Woodcutting section ───────────────────────────────────────────────────
 
     @ConfigSection(
@@ -389,12 +398,40 @@ public interface BotEngineConfig extends Config
     )
     default String smithingItemName() { return ""; }
 
+    // ── Safety section ────────────────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Safety",
+        description = "Emergency logout and safety stop conditions",
+        position = 8
+    )
+    String safetySection = "safety";
+
+    @ConfigItem(
+        keyName = "emergencyLogoutEnabled",
+        name = "Emergency logout",
+        description = "Log out of the game when HP is critically low and no food is available",
+        section = safetySection,
+        position = 0
+    )
+    default boolean emergencyLogoutEnabled() { return false; }
+
+    @ConfigItem(
+        keyName = "emergencyLogoutHpPercent",
+        name = "Logout below HP %",
+        description = "Log out when HP drops at or below this percentage and no food remains",
+        section = safetySection,
+        position = 1
+    )
+    @Range(min = 1, max = 30)
+    default int emergencyLogoutHpPercent() { return 10; }
+
     // ── Debug section ─────────────────────────────────────────────────────────
 
     @ConfigSection(
         name = "Debug",
         description = "Developer tools and debug overlays",
-        position = 8
+        position = 9
     )
     String debugSection = "debug";
 
