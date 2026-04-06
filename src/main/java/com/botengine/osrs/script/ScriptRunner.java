@@ -5,6 +5,7 @@ import com.botengine.osrs.api.Bank;
 import com.botengine.osrs.api.Camera;
 import com.botengine.osrs.api.Combat;
 import com.botengine.osrs.api.GameObjects;
+import com.botengine.osrs.api.GrandExchange;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.api.Interaction;
 import com.botengine.osrs.api.Inventory;
@@ -62,6 +63,7 @@ public class ScriptRunner
     private final Prayers prayers;
     private final GroundItems groundItems;
     private final WorldHopper worldHopper;
+    private final GrandExchange grandExchange;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     private final Antiban antiban;
@@ -102,6 +104,7 @@ public class ScriptRunner
         Prayers prayers,
         GroundItems groundItems,
         WorldHopper worldHopper,
+        GrandExchange grandExchange,
         Antiban antiban,
         Time time,
         Log botLog,
@@ -122,6 +125,7 @@ public class ScriptRunner
         this.prayers = prayers;
         this.groundItems = groundItems;
         this.worldHopper = worldHopper;
+        this.grandExchange = grandExchange;
         this.antiban = antiban;
         this.time = time;
         this.botLog = botLog;
@@ -195,7 +199,7 @@ public class ScriptRunner
         activeScript.inject(
             client, players, npcs, gameObjects, inventory,
             bank, movement, interaction, magic, combat, camera,
-            prayers, groundItems, worldHopper, antiban, time, botLog
+            prayers, groundItems, worldHopper, grandExchange, antiban, time, botLog
         );
         activeScript.configure(config); // apply per-script settings from config panel
 

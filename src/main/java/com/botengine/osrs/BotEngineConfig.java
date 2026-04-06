@@ -191,6 +191,25 @@ public interface BotEngineConfig extends Config
     )
     default boolean combatSandCrabsMode() { return false; }
 
+    @ConfigItem(
+        keyName = "combatCannonMode",
+        name = "Cannon mode",
+        description = "Place a dwarf multicannon and refill it with cannonballs automatically",
+        section = combatSection,
+        position = 12
+    )
+    default boolean combatCannonMode() { return false; }
+
+    @ConfigItem(
+        keyName = "combatCannonRefillThreshold",
+        name = "Cannon refill threshold",
+        description = "Refill cannon when fewer than this many cannonballs remain (approx ticks since fill)",
+        section = combatSection,
+        position = 13
+    )
+    @Range(min = 10, max = 100)
+    default int combatCannonRefillThreshold() { return 20; }
+
     // ── Woodcutting section ───────────────────────────────────────────────────
 
     @ConfigSection(
@@ -398,12 +417,77 @@ public interface BotEngineConfig extends Config
     )
     default String smithingItemName() { return ""; }
 
+    @ConfigItem(
+        keyName = "smithingBlastFurnaceMode",
+        name = "Blast Furnace mode",
+        description = "Use the Blast Furnace in Keldagrim — conveyor belt, bar dispenser, foreman pay",
+        section = productionSection,
+        position = 2
+    )
+    default boolean smithingBlastFurnaceMode() { return false; }
+
+    @ConfigItem(
+        keyName = "smithingCoalBag",
+        name = "Use coal bag",
+        description = "Fill a coal bag before each Blast Furnace run to reduce trips",
+        section = productionSection,
+        position = 3
+    )
+    default boolean smithingCoalBag() { return false; }
+
+    @ConfigItem(
+        keyName = "miningMotherlodeMode",
+        name = "Motherlode Mine mode",
+        description = "Mine pay-dirt, deposit in hopper, collect from sack, repair broken struts",
+        section = productionSection,
+        position = 4
+    )
+    default boolean miningMotherlodeMode() { return false; }
+
+    // ── Grand Exchange restocking ─────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Grand Exchange",
+        description = "Auto-restock supplies via the Grand Exchange",
+        position = 9
+    )
+    String geSection = "grandexchange";
+
+    @ConfigItem(
+        keyName = "geRestockEnabled",
+        name = "Enable GE restocking",
+        description = "Automatically buy more supplies at the Grand Exchange when running low",
+        section = geSection,
+        position = 0
+    )
+    default boolean geRestockEnabled() { return false; }
+
+    @ConfigItem(
+        keyName = "geRestockThreshold",
+        name = "Restock below quantity",
+        description = "Walk to GE when supply item drops below this quantity",
+        section = geSection,
+        position = 1
+    )
+    @Range(min = 1, max = 500)
+    default int geRestockThreshold() { return 100; }
+
+    @ConfigItem(
+        keyName = "geRestockQuantity",
+        name = "Buy quantity",
+        description = "How many units to buy each time restocking is triggered",
+        section = geSection,
+        position = 2
+    )
+    @Range(min = 10, max = 5000)
+    default int geRestockQuantity() { return 1000; }
+
     // ── Safety section ────────────────────────────────────────────────────────
 
     @ConfigSection(
         name = "Safety",
         description = "Emergency logout and safety stop conditions",
-        position = 8
+        position = 10
     )
     String safetySection = "safety";
 
@@ -431,7 +515,7 @@ public interface BotEngineConfig extends Config
     @ConfigSection(
         name = "Debug",
         description = "Developer tools and debug overlays",
-        position = 9
+        position = 11
     )
     String debugSection = "debug";
 

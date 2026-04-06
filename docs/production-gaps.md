@@ -19,7 +19,7 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 | Config persistence | 🔲 | Save/load JSON per-script profiles |
 | Progressive leveling | ✅ | 'level:value,...' string config — woodcutting, mining, fishing |
 | ABC2 antiban | ✅ | Account seed (per-run timing variation) + fatigue curve (delays grow over session) |
-| Grand Exchange restocking | 🔲 | Auto-buy supplies when running low |
+| Grand Exchange restocking | ✅ | GrandExchange API — open, create buy offer, collect; used by cannon for cannonballs |
 | Emergency logout | ✅ | Logs out when HP critically low and no food — configurable threshold |
 
 ---
@@ -35,7 +35,7 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 | Special attack | ✅ | Monitor spec %, auto-use at configured threshold |
 | Configurable loot list | ✅ | Comma-separated item IDs in config panel |
 | Banking loop | ✅ | Banks when inventory full, restocks food |
-| Cannon support | 🔲 | Place dwarf cannon, refill cannonballs, detect when empty |
+| Cannon support | ✅ | Place dwarf cannon, refill cannonballs by tick threshold, GE restock for balls |
 | Safe-spotting | 🔲 | Walk to safe tile, reposition if knocked out |
 | Position reset (Sand Crabs) | ✅ | Detects passive crabs, walks 15 tiles away and returns to reset aggro |
 | Poison/venom detection | 🔲 | Drink antipoison/antivenom when status inflicted |
@@ -75,7 +75,7 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 | Rock depletion repositioning | 🔲 | Hover/move to next rock immediately on depletion |
 | Progressive ore selection | 🔲 | Auto-switch ore type at level thresholds |
 | Gem rock support | 🔲 | Mine gem rocks, handle cut/uncut gems |
-| Motherlode Mine mode | 🔲 | Navigate mine, use sack, repair struts |
+| Motherlode Mine mode | ✅ | Pay-dirt → hopper → sack collect, broken strut repair, banking loop |
 | 3-rock rotation | 🔲 | Track 2–3 rocks in a cluster and rotate optimally |
 | Coal bag support | 🔲 | Fill/empty coal bag |
 
@@ -152,7 +152,7 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 |---|---|---|
 | Make-All dialog | ✅ | Handles smithing dialog |
 | Banking loop | ✅ | Deposits bars/items, withdraws next bar type |
-| Blast Furnace mode | 🔲 | Conveyor belt, collect bars, pay foreman, coal bag |
+| Blast Furnace mode | ✅ | Conveyor belt, collect bars, coal bag fill/empty, banking loop |
 | Furnace vs anvil mode | 🔲 | Detect which action and navigate appropriately |
 | Coal bag support | 🔲 | Fill before trip, empty at furnace |
 | Goldsmithing gauntlets | 🔲 | Detect if equipped for gold smelting XP bonus |
@@ -190,11 +190,11 @@ Status key: ✅ Done | 🔲 Not started | 🔜 In progress
 8. ✅ **Configurable alchemy item**
 9. ✅ **Bird nests** (Woodcutting)
 10. ✅ **Progressive leveling** (woodcutting, mining, fishing)
-11. 🔲 **Blast Furnace** (Smithing — best XP/GP method)
-12. 🔲 **Cannon support** (Combat)
+11. ✅ **Blast Furnace** (Smithing — conveyor belt, bar dispenser, coal bag)
+12. ✅ **Cannon support** (Combat — place, refill by threshold, GE restock)
 13. ✅ **ABC2 antiban** (account seed + fatigue curve)
 14. ✅ **Emergency logout** (Safety section in config)
 15. ✅ **Sand Crabs position reset** (Combat — sandCrabsMode config toggle)
 16. ✅ **1-tick fletching** (Fletching — darts + bolts auto-detected)
-17. 🔲 **Motherlode Mine** (Mining)
-18. 🔲 **Grand Exchange restocking** (cross-cutting)
+17. ✅ **Motherlode Mine** (Mining — hopper, sack, strut repair)
+18. ✅ **Grand Exchange restocking** (GrandExchange API — open, buy, collect)

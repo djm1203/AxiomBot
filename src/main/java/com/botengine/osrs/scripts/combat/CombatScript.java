@@ -3,7 +3,9 @@ package com.botengine.osrs.scripts.combat;
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.script.BotScript;
+import net.runelite.api.GameObject;
 import net.runelite.api.NPC;
+import net.runelite.api.ObjectComposition;
 import net.runelite.api.Prayer;
 import net.runelite.api.coords.WorldPoint;
 
@@ -44,7 +46,7 @@ public class CombatScript extends BotScript
     private static final int IDLE_TIMEOUT_TICKS = 4;
     private static final int MAX_CAMERA_RETRIES  = 5;
 
-    private enum State { FIND_TARGET, ATTACKING, EATING, LOOTING, BANKING, RESETTING }
+    private enum State { FIND_TARGET, ATTACKING, EATING, LOOTING, BANKING, RESETTING, FILLING_CANNON, BUYING_SUPPLIES }
 
     // ── Config values (set in configure()) ───────────────────────────────────
     private String  targetNpcName      = "Hill Giant";
@@ -60,10 +62,17 @@ public class CombatScript extends BotScript
     private boolean bankingMode         = false;
     private boolean emergencyLogout    = false;
     private int     emergencyLogoutHp  = 10;
-    private boolean sandCrabsMode     = false;
+    private boolean sandCrabsMode      = false;
+    private boolean cannonMode         = false;
+    private int     cannonRefillThreshold = 20; // ticks between refills
     private int     noTargetTickCount = 0;
-    private static final int PASSIVE_THRESHOLD = 10; // ticks before assuming passive
-    private WorldPoint resetTile; // set on first reset to avoid recalculating
+    private int     ticksSinceCannonFill = 0;
+    private static final int PASSIVE_THRESHOLD = 10;
+    // Cannon item IDs (inventory): base=6, stand=8, barrel=10, furnace=12
+    private static final int[] CANNON_PARTS = { 6, 8, 10, 12 };
+    // Cannonball item ID
+    private static final int CANNONBALL_ID  = 2;
+    private WorldPoint resetTile;
 
     // ── Runtime state ─────────────────────────────────────────────────────────
     private State state = State.FIND_TARGET;
@@ -80,6 +89,7 @@ public class CombatScript extends BotScript
     @Override
     public void configure(BotEngineConfig config)
     {
+        configRef = config;
         targetNpcName       = config.combatTarget();
         eatThresholdPercent = config.combatEatPercent();
         usePrayer           = config.combatUsePrayer();
@@ -93,7 +103,9 @@ public class CombatScript extends BotScript
         offensivePrayer  = parsePrayer(config.combatOffensivePrayer(), null);
         emergencyLogout   = config.emergencyLogoutEnabled();
         emergencyLogoutHp = config.emergencyLogoutHpPercent();
-        sandCrabsMode = config.combatSandCrabsMode();
+        sandCrabsMode           = config.combatSandCrabsMode();
+        cannonMode              = config.combatCannonMode();
+        cannonRefillThreshold   = config.combatCannonRefillThreshold();
 
         lootItemIds.clear();
         for (String part : config.combatLootItemIds().split(","))
@@ -106,12 +118,13 @@ public class CombatScript extends BotScript
     @Override
     public void onStart()
     {
-        log.info("Started — target='{}' eat={}% prayer={} loot={} spec={} banking={}",
-            targetNpcName, eatThresholdPercent, usePrayer, lootEnabled, useSpec, bankingMode);
+        log.info("Started — target='{}' eat={}% prayer={} loot={} spec={} banking={} cannon={}",
+            targetNpcName, eatThresholdPercent, usePrayer, lootEnabled, useSpec, bankingMode, cannonMode);
         state = State.FIND_TARGET;
         cameraRetryCount = 0;
         homeTile = players.getLocation();
         noTargetTickCount = 0;
+        ticksSinceCannonFill = 0;
         resetTile = null;
     }
 
@@ -126,6 +139,15 @@ public class CombatScript extends BotScript
             log.warn("EMERGENCY LOGOUT — HP critically low, no food");
             movement.logout();
             return;
+        }
+
+        // Cannon maintenance — check before combat actions
+        if (cannonMode)
+        {
+            ticksSinceCannonFill++;
+            if (state == State.BUYING_SUPPLIES) { buySupplies(); return; }
+            if (shouldRefillCannon())           { state = State.FILLING_CANNON; }
+            if (state == State.FILLING_CANNON)  { fillCannon(); return; }
         }
 
         // Prayer pot drinking has highest priority — keeps prayer active
@@ -148,9 +170,11 @@ public class CombatScript extends BotScript
             case FIND_TARGET:   findAndAttack();    break;
             case ATTACKING:     checkCombatState(); break;
             case EATING:        state = State.FIND_TARGET; break;
-            case LOOTING:       lootItems();        break;
-            case BANKING:       handleBanking();    break;
-            case RESETTING:     resetAggro();       break;
+            case LOOTING:          lootItems();        break;
+            case BANKING:          handleBanking();    break;
+            case RESETTING:        resetAggro();       break;
+            case FILLING_CANNON:   fillCannon();       break;
+            case BUYING_SUPPLIES:  buySupplies();      break;
         }
     }
 
@@ -384,6 +408,161 @@ public class CombatScript extends BotScript
         }
         return false;
     }
+
+    // ── Cannon handlers ───────────────────────────────────────────────────────
+
+    /**
+     * Returns true when the cannon should be refilled.
+     * Triggers after {@code cannonRefillThreshold} ticks since the last fill,
+     * provided a cannon object is nearby and cannonballs are in the inventory.
+     */
+    private boolean shouldRefillCannon()
+    {
+        if (!inventory.contains(CANNONBALL_ID)) return false;
+        if (ticksSinceCannonFill < cannonRefillThreshold) return false;
+        return findCannon() != null;
+    }
+
+    /**
+     * Finds the placed dwarf cannon nearby by looking for a GameObject whose
+     * definition includes a "Fire" action (unique to the assembled cannon).
+     */
+    private GameObject findCannon()
+    {
+        return gameObjects.nearest(obj -> {
+            ObjectComposition def = client.getObjectDefinition(obj.getId());
+            if (def == null) return false;
+            String[] actions = def.getActions();
+            if (actions == null) return false;
+            for (String action : actions)
+            {
+                if ("Fire".equals(action)) return true;
+            }
+            return false;
+        });
+    }
+
+    /**
+     * Places the cannon from inventory if all 4 parts are present and no cannon
+     * is already deployed nearby.  Uses "Set-up" on the cannon base item.
+     */
+    private void placeCannon()
+    {
+        boolean hasParts = true;
+        for (int partId : CANNON_PARTS)
+        {
+            if (!inventory.contains(partId)) { hasParts = false; break; }
+        }
+        if (!hasParts) return;
+        if (findCannon() != null) return; // already placed
+
+        interaction.clickInventoryItem(CANNON_PARTS[0], "Set-up");
+        antiban.reactionDelay();
+        log.info("Setting up dwarf cannon");
+    }
+
+    /**
+     * Walks to the cannon and uses cannonballs on it to refill.
+     * Transitions back to FIND_TARGET on success.
+     */
+    private void fillCannon()
+    {
+        if (!inventory.contains(CANNONBALL_ID))
+        {
+            if (config() != null && config().geRestockEnabled())
+            {
+                state = State.BUYING_SUPPLIES;
+            }
+            else
+            {
+                log.warn("Out of cannonballs — stopping cannon mode");
+                state = State.FIND_TARGET;
+            }
+            return;
+        }
+
+        GameObject cannon = findCannon();
+        if (cannon == null)
+        {
+            // Cannon might need placing on this run
+            placeCannon();
+            return;
+        }
+
+        int ballSlot = inventory.getSlot(CANNONBALL_ID);
+        if (ballSlot == -1) return;
+
+        interaction.useItemOn(CANNONBALL_ID, ballSlot, cannon);
+        antiban.reactionDelay();
+        ticksSinceCannonFill = 0;
+        log.debug("Refilled cannon with cannonballs");
+        state = State.FIND_TARGET;
+    }
+
+    /**
+     * Walks to the Grand Exchange and buys cannonballs when out of stock.
+     * Uses the GE restock settings from config.
+     */
+    private void buySupplies()
+    {
+        if (!grandExchange.isOpen())
+        {
+            grandExchange.openNearest();
+            antiban.reactionDelay();
+            return;
+        }
+
+        // Collect any completed offers first
+        if (grandExchange.hasItemsToCollect())
+        {
+            grandExchange.collectAll();
+            antiban.reactionDelay();
+            if (inventory.contains(CANNONBALL_ID))
+            {
+                log.info("Collected cannonballs — resuming combat");
+                state = State.FIND_TARGET;
+            }
+            return;
+        }
+
+        // If no active offer, create one
+        if (!grandExchange.hasActiveOffer())
+        {
+            int slot = grandExchange.findEmptySlot();
+            if (slot == -1) { log.warn("No empty GE slots"); return; }
+            grandExchange.clickSlot(slot);
+            antiban.reactionDelay();
+            grandExchange.clickBuy();
+            antiban.reactionDelay();
+        }
+
+        // If search is open, click first result
+        if (grandExchange.isSearchOpen())
+        {
+            grandExchange.clickFirstResult();
+            antiban.reactionDelay();
+            return;
+        }
+
+        // If offer setup is open, set quantity and confirm
+        if (grandExchange.isOfferSetupOpen())
+        {
+            grandExchange.setQuantity(1000);
+            antiban.reactionDelay();
+            grandExchange.setPriceAboveGuide();
+            antiban.reactionDelay();
+            grandExchange.confirmOffer();
+            antiban.reactionDelay();
+        }
+    }
+
+    /** Returns the stored config reference (may be null if configure() not called). */
+    private com.botengine.osrs.BotEngineConfig config()
+    {
+        return configRef;
+    }
+
+    private com.botengine.osrs.BotEngineConfig configRef = null;
 
     private static Prayer parsePrayer(String name, Prayer fallback)
     {

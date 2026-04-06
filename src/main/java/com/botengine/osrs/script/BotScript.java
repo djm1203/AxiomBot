@@ -5,6 +5,7 @@ import com.botengine.osrs.api.Bank;
 import com.botengine.osrs.api.Camera;
 import com.botengine.osrs.api.Combat;
 import com.botengine.osrs.api.GameObjects;
+import com.botengine.osrs.api.GrandExchange;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.api.Interaction;
 import com.botengine.osrs.api.Inventory;
@@ -73,6 +74,7 @@ public abstract class BotScript
     protected Prayers prayers;
     protected GroundItems groundItems;
     protected WorldHopper worldHopper;
+    protected GrandExchange grandExchange;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     protected Antiban antiban;
@@ -98,6 +100,7 @@ public abstract class BotScript
         Prayers prayers,
         GroundItems groundItems,
         WorldHopper worldHopper,
+        GrandExchange grandExchange,
         Antiban antiban,
         Time time,
         Log log
@@ -117,6 +120,7 @@ public abstract class BotScript
         this.prayers = prayers;
         this.groundItems = groundItems;
         this.worldHopper = worldHopper;
+        this.grandExchange = grandExchange;
         this.antiban = antiban;
         this.time = time;
         this.log = log;

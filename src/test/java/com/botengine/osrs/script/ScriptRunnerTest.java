@@ -2,6 +2,7 @@ package com.botengine.osrs.script;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.*;
+import com.botengine.osrs.api.GrandExchange;
 import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.api.Prayers;
 import com.botengine.osrs.api.GroundItems;
@@ -45,6 +46,7 @@ class ScriptRunnerTest
     @Mock private Prayers prayers;
     @Mock private GroundItems groundItems;
     @Mock private WorldHopper worldHopper;
+    @Mock private GrandExchange grandExchange;
     @Mock private Antiban antiban;
     @Mock private Time time;
     @Mock private Log botLog;
@@ -59,7 +61,7 @@ class ScriptRunnerTest
         runner = new ScriptRunner(
             client, players, npcs, gameObjects, inventory,
             bank, movement, interaction, magic, combat, camera,
-            prayers, groundItems, worldHopper, antiban, time, botLog, config
+            prayers, groundItems, worldHopper, grandExchange, antiban, time, botLog, config
         );
         tick = new GameTick();
         // Default: no break pending, no break over
