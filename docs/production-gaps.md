@@ -3,190 +3,197 @@
 What production bots (TriBot, DreamBot, RuneMate) have that we currently don't.
 Ordered by impact — highest value additions first within each script.
 
+Status key: ✅ Done | 🔲 Not started | 🔜 In progress
+
 ---
 
 ## Cross-Cutting (affects all scripts)
 
-| Feature | Current state | What's needed |
+| Feature | Status | Notes |
 |---|---|---|
-| Banking mode | All scripts power-drop only | Walk to bank, deposit, return loop |
-| Pathfinding | `movement.walkTo()` (direct tile walk) | Obstacle-aware pathfinding (doors, ladders, agility shortcuts) |
-| World hopping | Not implemented | Hop on depletion/competition, low-ping world selection |
-| Config persistence | RuneLite config panel only | Save/load JSON per-script profiles |
-| Progressive leveling | Fixed target | Auto-switch method when level threshold reached |
-| Shift-click drop | One item at a time with delay | Hold shift + glide mouse over inventory for fast mass-drop |
-| ABC2 antiban | Gaussian delays + breaks | Per-account unique behavior seeds, hover mechanics, fatigue curve |
-| Grand Exchange restocking | Not implemented | Auto-buy supplies when running low |
-| Emergency logout | Stops script on low HP/no food | Actual game logout, not just script stop |
+| Banking mode | ✅ | All scripts have bank/deposit/return loop |
+| World hopping utility | ✅ | WorldHopper.java — low-pop world selection, hop cooldown |
+| World hop on competition | ✅ | Mining + Woodcutting — hop when player within 5 tiles |
+| Shift-click drop | ✅ | Mining + Fishing — dropAll() fires all drops in one pass |
+| Pathfinding | 🔲 | Obstacle-aware pathfinding (doors, ladders, agility shortcuts) |
+| Config persistence | 🔲 | Save/load JSON per-script profiles |
+| Progressive leveling | 🔲 | Auto-switch method when level threshold reached |
+| ABC2 antiban | 🔲 | Per-account unique behavior seeds, hover mechanics, fatigue curve |
+| Grand Exchange restocking | 🔲 | Auto-buy supplies when running low |
+| Emergency logout | 🔲 | Actual game logout on low HP/no food, not just script stop |
 
 ---
 
 ## Combat
 
-**Currently has:** NPC targeting by name, food eating, camera rotation, animation detection, configurable eat threshold.
+**Has:** NPC targeting, food eating, camera rotation, animation detection, configurable eat threshold, prayer activation/potions, loot pickup (configurable item list), special attack, banking loop.
 
-| Missing feature | Notes |
-|---|---|
-| Prayer support | Activate/deactivate prayers (Protect from Melee/Ranged/Magic, offensive prayers). Track remaining prayer points, drink prayer potions at threshold |
-| Prayer potion management | Detect prayer points %, drink super/regular prayer pots from inventory or bank |
-| Loot pickup | Detect ground items after kill, filter by configurable value threshold or item whitelist, pick up before targeting next NPC |
-| Special attack usage | Monitor spec bar %, auto-use spec weapon at configured threshold (e.g. Dragon Dagger at 55%) |
-| Cannon support | Place dwarf cannon, refill cannonballs, detect when cannon empty |
-| Safe-spotting | Walk to a safe tile relative to target NPC and re-position if knocked out of safe spot |
-| Position reset (Sand Crabs) | Detect when crabs go dormant, walk away and return to wake them |
-| Poison/venom detection | Drink antipoison/antivenom when status inflicted |
-| Superantifire detection | Equip/drink before fighting dragons |
-| Multiway zone detection | Handle multi-combat areas (don't re-click while already being attacked by 2+ NPCs) |
-| Slayer task tracking | Count kills, stop when task complete |
-| Combat style selection | Set attack style (accurate/aggressive/defensive/controlled) on the combat tab |
-| Configurable loot list | User-supplied item ID/name whitelist or min GE value for pickup |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Prayer support | ✅ | Protective + offensive prayers, prayer pot drinking at threshold |
+| Loot pickup | ✅ | Ground item scan, configurable item ID whitelist |
+| Special attack | ✅ | Monitor spec %, auto-use at configured threshold |
+| Configurable loot list | ✅ | Comma-separated item IDs in config panel |
+| Banking loop | ✅ | Banks when inventory full, restocks food |
+| Cannon support | 🔲 | Place dwarf cannon, refill cannonballs, detect when empty |
+| Safe-spotting | 🔲 | Walk to safe tile, reposition if knocked out |
+| Position reset (Sand Crabs) | 🔲 | Detect dormant crabs, walk away and return |
+| Poison/venom detection | 🔲 | Drink antipoison/antivenom when status inflicted |
+| Superantifire detection | 🔲 | Equip/drink before fighting dragons |
+| Multiway zone detection | 🔲 | Handle multi-combat areas |
+| Slayer task tracking | 🔲 | Count kills, stop when task complete |
+| Combat style selection | 🔲 | Set attack style on the combat tab |
 
 ---
 
 ## Woodcutting
 
-**Currently has:** Tree finding by ID or name filter, animation-based chop detection, power-drop.
+**Has:** Tree finding by ID/name filter, animation-based detection, power-drop, banking mode, bird nest pickup, world hop on competition.
 
-| Missing feature | Notes |
-|---|---|
-| Banking mode | Walk to nearest bank, deposit logs, return and resume |
-| Bird nest detection | When nest drops (object spawns on ground), pick it up before continuing |
-| Axe upgrading | Detect when a better axe is available in bank, equip it |
-| Forestry events | Detect Forestry activity spawns (pheasant, poaching, rising roots etc.) and participate for bonus XP/rewards |
-| Progressive tree selection | Auto-switch tree type when Woodcutting level reaches threshold (e.g. switch Oak→Willow at 30, Willow→Maple at 45) |
-| Position randomization | Don't always click same tile/tree — rotate among nearby valid trees |
-| Crystal/Infernal axe tracking | Track special charge usage |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Banking mode | ✅ | Walk to bank, deposit, return |
+| Bird nest detection | ✅ | Picks up nests before continuing |
+| World hop on competition | ✅ | Hops when another player within 5 tiles |
+| Axe upgrading | 🔲 | Detect better axe in bank, equip it |
+| Forestry events | 🔲 | Detect activity spawns and participate |
+| Progressive tree selection | 🔲 | Auto-switch tree type at level thresholds |
+| Position randomization | 🔲 | Rotate among nearby valid trees |
+| Crystal/Infernal axe tracking | 🔲 | Track special charge usage |
 
 ---
 
 ## Mining
 
-**Currently has:** Rock finding by ID or name filter, animation-based mine detection, power-drop.
+**Has:** Rock finding by ID/name filter, animation-based detection, power-drop, banking mode, shift-drop mode, world hop on competition.
 
-| Missing feature | Notes |
-|---|---|
-| Banking mode | Walk to bank, deposit ore, return |
-| Rock depletion repositioning | When current rock depletes, immediately hover/move to next prioritized rock rather than waiting for FIND_ROCK tick |
-| World hopping on competition | Detect other players mining same rocks, hop world |
-| Progressive ore selection | Auto-switch ore type at level thresholds |
-| Gem rock support | Mine gem rocks, handle cut/uncut gems |
-| Motherlode Mine mode | Navigate upper/lower mine, use sack, repair struts, bank pay-dirt |
-| 3-rock rotation | Track 2–3 rocks in a cluster and rotate among them optimally |
-| Coal bag support | Detect coal bag in inventory, fill/empty it |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Banking mode | ✅ | Walk to bank, deposit ore, return |
+| Shift-drop mode | ✅ | dropAll() fires all drops in one pass |
+| World hop on competition | ✅ | Hops when another player within 5 tiles |
+| Rock depletion repositioning | 🔲 | Hover/move to next rock immediately on depletion |
+| Progressive ore selection | 🔲 | Auto-switch ore type at level thresholds |
+| Gem rock support | 🔲 | Mine gem rocks, handle cut/uncut gems |
+| Motherlode Mine mode | 🔲 | Navigate mine, use sack, repair struts |
+| 3-rock rotation | 🔲 | Track 2–3 rocks in a cluster and rotate optimally |
+| Coal bag support | 🔲 | Fill/empty coal bag |
 
 ---
 
 ## Fishing
 
-**Currently has:** Spot finding by NPC ID, configurable action, animation detection, power-drop.
+**Has:** Spot finding by NPC ID, configurable action, animation detection, power-drop, banking mode, shift-drop mode.
 
-| Missing feature | Notes |
-|---|---|
-| Banking mode | Walk to bank, deposit fish, return |
-| Shift-drop mode | Shift-click drop fish one-by-one with mouse glide for faster inventory clearing |
-| Spot prediction | When spot moves, check nearby tiles first before full `nearest()` scan |
-| Tool requirement detection | Warn/stop if required tool (fly rod, harpoon, etc.) not equipped or in inventory |
-| Karambwan fishing | Special spot + cooking integration |
-| Minnow fishing | Attention-based — spot moves every ~15s, must re-click frequently |
-| Barbarian fishing | Requires strength/agility levels, uses barbarian rod |
-| Energy/stamina potion | Drink when run energy drops below threshold while walking to bank |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Banking mode | ✅ | Walk to bank, deposit fish, return |
+| Shift-drop mode | ✅ | dropAll() fires all drops in one pass |
+| Spot prediction | 🔲 | Check nearby tiles first when spot moves |
+| Tool requirement detection | 🔲 | Warn/stop if required tool missing |
+| Karambwan fishing | 🔲 | Special spot + cooking integration |
+| Minnow fishing | 🔲 | Attention-based — spot moves every ~15s |
+| Barbarian fishing | 🔲 | Requires strength/agility levels |
+| Energy/stamina potion | 🔲 | Drink when run energy drops below threshold |
 
 ---
 
 ## High Alchemy
 
-**Currently has:** Basic alchemy loop (item hardcoded).
+**Has:** Configurable item ID (0 = auto-detect), nature rune tracking, Staff of Fire detection, banking loop.
 
-| Missing feature | Notes |
-|---|---|
-| Configurable item selection | User picks which item ID to alch — currently hardcoded |
-| Nature rune tracking | Count remaining runes, stop/bank when running low |
-| Staff of Fire detection | If equipped, skip fire rune requirement; if not, ensure fire runes in inventory |
-| Rune pouch support | Withdraw/detect runes inside rune pouch |
-| Banking loop | Restock items and runes from bank when supply runs out |
-| Profit/XP tracking overlay | Show casts per hour, GP profit, XP/hr |
-| Multi-item support | Cycle through a list of items to alch (priority order) |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Configurable item selection | ✅ | User picks item ID or auto-detects non-rune |
+| Nature rune tracking | ✅ | Stops/banks when out of runes |
+| Banking loop | ✅ | Restocks nature runes and items from bank |
+| Rune pouch support | 🔲 | Detect runes inside rune pouch |
+| Profit/XP tracking overlay | 🔲 | Show casts/hr, GP profit, XP/hr |
+| Multi-item support | 🔲 | Cycle through a list of items to alch |
 
 ---
 
 ## Cooking
 
-**Currently has:** Basic cooking state machine.
+**Has:** Fire/range detection, Use-food-on-fire, Make-All dialog, banking loop.
 
-| Missing feature | Notes |
-|---|---|
-| Location selection | Support multiple cooking spots: Rogues' Den (no burn with gauntlets), Lumbridge range, Hosidius kitchen (+5% burn reduction), Nardah, Al Kharid |
-| Cooking gauntlet detection | Detect if Cooking gauntlets equipped (reduces burn rate on lobster/swordfish/shark) |
-| Banking loop | Walk to bank, deposit cooked food, withdraw raw food |
-| Burn rate tracking | Track burned food %, adjust strategy or switch location |
-| Fire detection | If cooking on a player-made fire, detect when it goes out and relight or move |
-| Progressive food switching | Auto-switch food type at level thresholds for max XP |
-| Make-All dialog | Handle "How many?" / "Make All" dialog that appears when clicking raw food on range |
-| Wine making | Jug of water + grapes → ferment (no fire needed, mass XP method) |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Make-All dialog | ✅ | Handles "How many?" dialog |
+| Banking loop | ✅ | Deposit cooked food, withdraw raw food |
+| Location selection | 🔲 | Rogues' Den, Hosidius kitchen, etc. |
+| Cooking gauntlet detection | 🔲 | Reduce burn rate on lobster/swordfish/shark |
+| Burn rate tracking | 🔲 | Track burned food % |
+| Progressive food switching | 🔲 | Auto-switch at level thresholds |
+| Wine making | 🔲 | Jug of water + grapes mass method |
 
 ---
 
 ## Fletching
 
-**Currently has:** Basic fletching state machine.
+**Has:** Knife+logs (cutting) and string+unstrung (stringing) auto-detection, Make-All dialog, banking loop.
 
-| Missing feature | Notes |
-|---|---|
-| Method selection | Support darts, bolts, bows (stringing + cutting), arrow shafts |
-| 1-tick fletching | Click item then immediately click next — no wait for animation to complete — for darts/bolts |
-| Make-X dialog handling | Handle the "How many would you like to make?" dialog |
-| Banking loop | Restock materials (feathers, tips, logs, string) from bank |
-| Inventory layout enforcement | Darts/bolts: tips in slot 1, feathers in slot 2 for correct 1-tick behavior |
-| Material quantity tracking | Count remaining tips/feathers/logs, trigger bank trip when low |
-| Stringing mode | Use bow string on unstrung bow with Make-All dialog |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Make-All dialog | ✅ | Handles production dialog |
+| Banking loop | ✅ | Restocks logs/strings/unstrung bows |
+| 1-tick fletching | 🔲 | Click item then immediately next — darts/bolts |
+| Darts/bolts method | 🔲 | Tips + feathers, 1-tick behavior |
+| Inventory layout enforcement | 🔲 | Tips in slot 1, feathers in slot 2 for 1-tick |
+| Material quantity tracking | 🔲 | Count remaining tips/feathers, trigger bank early |
 
 ---
 
 ## Smithing
 
-**Currently has:** Basic smithing state machine.
+**Has:** Anvil detection, Use-bar-on-anvil, Make-All dialog, banking loop for bars.
 
-| Missing feature | Notes |
-|---|---|
-| Blast Furnace mode | Conveyor belt deposit, collect bars, pay foreman, manage coal bag |
-| Banking loop | Walk to bank, deposit bars/items, withdraw ore |
-| Furnace vs anvil mode | Detect which action (smelting vs smithing) and navigate appropriately |
-| Coal bag support | Detect coal bag, fill before trip, empty at furnace |
-| Goldsmithing gauntlets | Detect if equipped for gold smelting XP bonus |
-| Make-X dialog | Handle the dialog when smithing items at anvil |
-| Item selection config | User picks what to smith (platebody, platelegs, helm, bars, etc.) |
-| Ore-to-bar tracking | Count ore supply, trigger resupply when running low |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Make-All dialog | ✅ | Handles smithing dialog |
+| Banking loop | ✅ | Deposits bars/items, withdraws next bar type |
+| Blast Furnace mode | 🔲 | Conveyor belt, collect bars, pay foreman, coal bag |
+| Furnace vs anvil mode | 🔲 | Detect which action and navigate appropriately |
+| Coal bag support | 🔲 | Fill before trip, empty at furnace |
+| Goldsmithing gauntlets | 🔲 | Detect if equipped for gold smelting XP bonus |
+| Item selection config | 🔲 | User picks what to smith |
+| Ore-to-bar tracking | 🔲 | Count ore supply, trigger resupply early |
 
 ---
 
 ## Crafting
 
-**Currently has:** Basic gem cutting state machine.
+**Has:** Gem cutting (chisel + uncut gems), Make-All dialog, banking loop for uncut gems.
 
-| Missing feature | Notes |
-|---|---|
-| Jewelry crafting mode | Gold bar + gem → ring/necklace/bracelet/amulet at furnace |
-| Banking loop | Restock uncut gems or gold bars from bank |
-| Crushed gem detection | Semi-precious gems (Opal, Jade, Red Topaz) can fail → crushed gem; detect and drop |
-| Make-X dialog | Handle dialog for jewelry crafting |
-| Chisel tool check | Verify chisel in inventory before starting; withdraw from bank if missing |
-| Leather crafting mode | Needle + thread + leather → gloves/chaps/body |
-| Gem type progression | Auto-switch gem type at level thresholds |
-| Enchanting integration | After crafting jewelry, optionally cast enchant spell on it |
+| Missing feature | Status | Notes |
+|---|---|---|
+| Make-All dialog | ✅ | Handles production dialog |
+| Banking loop | ✅ | Restocks uncut gems from bank |
+| Jewelry crafting mode | 🔲 | Gold bar + gem → ring/necklace at furnace |
+| Crushed gem detection | 🔲 | Semi-precious gems can fail → drop crushed gem |
+| Chisel tool check | 🔲 | Verify chisel in inventory; withdraw from bank if missing |
+| Leather crafting mode | 🔲 | Needle + thread + leather |
+| Gem type progression | 🔲 | Auto-switch gem type at level thresholds |
+| Enchanting integration | 🔲 | Optionally cast enchant after crafting jewelry |
 
 ---
 
-## Priority Order for Implementation
+## Priority Order for Next Implementation
 
-1. **Banking loop** (all scripts — biggest functional gap, affects usability most)
-2. **Combat: prayer + prayer potions** (core combat feature)
-3. **Combat: loot pickup** (required for any profitable combat)
-4. **Make-X / Make-All dialog handling** (Cooking, Smithing, Fletching, Crafting all need it)
-5. **Shift-drop** (Fishing, Mining quality-of-life)
-6. **World hopping** (Mining, Woodcutting — needed for resource competition)
-7. **Combat: special attack** (common AFK training optimization)
-8. **Progressive leveling** (all skills — reduces manual intervention)
-9. **Configurable item selection for Alchemy** (currently hardcoded — trivial fix)
-10. **Bird nests** (Woodcutting — popular feature)
-11. **Blast Furnace** (Smithing — best XP/GP method)
-12. **Cannon support** (Combat — high-value optional feature)
+1. ✅ **Banking loop** (all scripts)
+2. ✅ **Combat: prayer + prayer potions**
+3. ✅ **Combat: loot pickup**
+4. ✅ **Make-X / Make-All dialog** (Cooking, Smithing, Fletching, Crafting)
+5. ✅ **Shift-drop** (Fishing, Mining)
+6. ✅ **World hopping on competition** (Mining, Woodcutting)
+7. ✅ **Combat: special attack**
+8. ✅ **Configurable alchemy item**
+9. ✅ **Bird nests** (Woodcutting)
+10. 🔲 **Progressive leveling** (all skills — reduces manual intervention)
+11. 🔲 **Blast Furnace** (Smithing — best XP/GP method)
+12. 🔲 **Cannon support** (Combat)
+13. 🔲 **ABC2 antiban** (cross-cutting — behavior seeds, fatigue curve)
+14. 🔲 **Emergency logout** (cross-cutting)
+15. 🔲 **Sand Crabs position reset** (Combat)
+16. 🔲 **1-tick fletching** (Fletching)
+17. 🔲 **Motherlode Mine** (Mining)

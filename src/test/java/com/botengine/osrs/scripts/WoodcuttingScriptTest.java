@@ -8,6 +8,7 @@ import com.botengine.osrs.api.Prayers;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
+import com.botengine.osrs.util.WorldHopper;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,7 @@ class WoodcuttingScriptTest
     @Mock private Camera camera;
     @Mock private Prayers prayers;
     @Mock private GroundItems groundItems;
+    @Mock private WorldHopper worldHopper;
     @Mock private Antiban antiban;
     @Mock private Time time;
     @Mock private Log log;
@@ -63,7 +65,7 @@ class WoodcuttingScriptTest
     {
         script = new WoodcuttingScript();
         script.inject(client, players, npcs, gameObjects, inventory,
-            bank, movement, interaction, magic, combat, camera, prayers, groundItems, antiban, time, log);
+            bank, movement, interaction, magic, combat, camera, prayers, groundItems, worldHopper, antiban, time, log);
         script.onStart();
     }
 

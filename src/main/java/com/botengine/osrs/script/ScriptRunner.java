@@ -16,6 +16,7 @@ import com.botengine.osrs.api.Prayers;
 import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
+import com.botengine.osrs.util.WorldHopper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -60,6 +61,7 @@ public class ScriptRunner
     private final Camera camera;
     private final Prayers prayers;
     private final GroundItems groundItems;
+    private final WorldHopper worldHopper;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     private final Antiban antiban;
@@ -99,6 +101,7 @@ public class ScriptRunner
         Camera camera,
         Prayers prayers,
         GroundItems groundItems,
+        WorldHopper worldHopper,
         Antiban antiban,
         Time time,
         Log botLog,
@@ -118,6 +121,7 @@ public class ScriptRunner
         this.camera = camera;
         this.prayers = prayers;
         this.groundItems = groundItems;
+        this.worldHopper = worldHopper;
         this.antiban = antiban;
         this.time = time;
         this.botLog = botLog;
@@ -191,7 +195,7 @@ public class ScriptRunner
         activeScript.inject(
             client, players, npcs, gameObjects, inventory,
             bank, movement, interaction, magic, combat, camera,
-            prayers, groundItems, antiban, time, botLog
+            prayers, groundItems, worldHopper, antiban, time, botLog
         );
         activeScript.configure(config); // apply per-script settings from config panel
 

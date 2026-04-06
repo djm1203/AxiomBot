@@ -16,6 +16,7 @@ import com.botengine.osrs.api.Prayers;
 import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
+import com.botengine.osrs.util.WorldHopper;
 import net.runelite.api.Client;
 
 /**
@@ -71,6 +72,7 @@ public abstract class BotScript
     protected Camera camera;
     protected Prayers prayers;
     protected GroundItems groundItems;
+    protected WorldHopper worldHopper;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     protected Antiban antiban;
@@ -95,6 +97,7 @@ public abstract class BotScript
         Camera camera,
         Prayers prayers,
         GroundItems groundItems,
+        WorldHopper worldHopper,
         Antiban antiban,
         Time time,
         Log log
@@ -113,6 +116,7 @@ public abstract class BotScript
         this.camera = camera;
         this.prayers = prayers;
         this.groundItems = groundItems;
+        this.worldHopper = worldHopper;
         this.antiban = antiban;
         this.time = time;
         this.log = log;

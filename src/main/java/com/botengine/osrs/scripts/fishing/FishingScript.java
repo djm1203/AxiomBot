@@ -42,6 +42,7 @@ public class FishingScript extends BotScript
     private int   idleTickCount = 0;
     private String  fishingAction = "Lure";
     private boolean bankingMode   = false;
+    private boolean shiftDrop     = false;
     private WorldPoint homeTile;
 
     @Inject
@@ -56,6 +57,7 @@ public class FishingScript extends BotScript
         String action = config.fishingAction().trim();
         fishingAction = action.isEmpty() ? "Lure" : action;
         bankingMode   = config.fishingBankingMode();
+        shiftDrop     = config.fishingShiftDrop();
     }
 
     @Override
@@ -137,6 +139,13 @@ public class FishingScript extends BotScript
 
     private void dropFish()
     {
+        if (shiftDrop)
+        {
+            interaction.dropAll(FISH_IDS);
+            antiban.reactionDelay();
+            state = State.FIND_SPOT;
+            return;
+        }
         boolean droppedAny = false;
         for (int fishId : FISH_IDS)
         {

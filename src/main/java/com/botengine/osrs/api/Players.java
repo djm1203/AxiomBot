@@ -6,6 +6,7 @@ import net.runelite.api.Player;
 import net.runelite.api.coords.WorldPoint;
 
 import javax.inject.Inject;
+import java.util.List;
 
 /**
  * Helpers for querying local player state.
@@ -136,5 +137,21 @@ public class Players
     public Player getLocalPlayer()
     {
         return client.getLocalPlayer();
+    }
+
+    /**
+     * Returns the number of other players within the given tile radius.
+     * Does not count the local player.
+     */
+    public int nearbyCount(int radius)
+    {
+        WorldPoint local = getLocation();
+        int count = 0;
+        for (net.runelite.api.Player p : client.getPlayers())
+        {
+            if (p == client.getLocalPlayer()) continue;
+            if (p.getWorldLocation().distanceTo(local) <= radius) count++;
+        }
+        return count;
     }
 }

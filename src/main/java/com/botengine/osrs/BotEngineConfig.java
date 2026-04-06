@@ -218,6 +218,15 @@ public interface BotEngineConfig extends Config
     )
     default boolean woodcuttingPickupNests() { return true; }
 
+    @ConfigItem(
+        keyName = "woodcuttingHopOnCompetition",
+        name = "Hop on competition",
+        description = "World hop when another player is chopping within 5 tiles",
+        section = woodcuttingSection,
+        position = 3
+    )
+    default boolean woodcuttingHopOnCompetition() { return false; }
+
     // ── Mining section ────────────────────────────────────────────────────────
 
     @ConfigSection(
@@ -245,6 +254,24 @@ public interface BotEngineConfig extends Config
     )
     default boolean miningBankingMode() { return false; }
 
+    @ConfigItem(
+        keyName = "miningShiftDrop",
+        name = "Shift-drop mode",
+        description = "Drop all ore in one pass without delays (faster power-mining)",
+        section = miningSection,
+        position = 2
+    )
+    default boolean miningShiftDrop() { return false; }
+
+    @ConfigItem(
+        keyName = "miningHopOnCompetition",
+        name = "Hop on competition",
+        description = "World hop when another player is mining within 5 tiles",
+        section = miningSection,
+        position = 3
+    )
+    default boolean miningHopOnCompetition() { return false; }
+
     // ── Fishing section ───────────────────────────────────────────────────────
 
     @ConfigSection(
@@ -271,6 +298,15 @@ public interface BotEngineConfig extends Config
         position = 1
     )
     default boolean fishingBankingMode() { return false; }
+
+    @ConfigItem(
+        keyName = "fishingShiftDrop",
+        name = "Shift-drop mode",
+        description = "Drop all fish in one pass without delays (faster power-fishing)",
+        section = fishingSection,
+        position = 2
+    )
+    default boolean fishingShiftDrop() { return false; }
 
     // ── Alchemy section ───────────────────────────────────────────────────────
 

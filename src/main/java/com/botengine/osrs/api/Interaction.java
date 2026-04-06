@@ -215,6 +215,56 @@ public class Interaction
     }
 
     /**
+     * Drops a single inventory item using the direct drop action.
+     * Finds the first slot containing the item and fires CC_OP op=7.
+     */
+    public void dropItem(int itemId)
+    {
+        net.runelite.api.ItemContainer inv =
+            client.getItemContainer(net.runelite.api.InventoryID.INVENTORY);
+        if (inv == null) return;
+        net.runelite.api.Item[] items = inv.getItems();
+        for (int slot = 0; slot < items.length; slot++)
+        {
+            if (items[slot] != null && items[slot].getId() == itemId)
+            {
+                client.menuAction(slot, net.runelite.api.widgets.WidgetInfo.INVENTORY.getId(),
+                    MenuAction.CC_OP, 7, itemId, "Drop", "");
+                return;
+            }
+        }
+        log.warn("dropItem: item id={} not found in inventory", itemId);
+    }
+
+    /**
+     * Drops all items matching any of the given IDs in a single inventory scan.
+     * Fires all drop actions without delay — equivalent to shift-clicking across items.
+     * Use this for fast power-drop (fishing, mining, etc.).
+     */
+    public void dropAll(int... itemIds)
+    {
+        net.runelite.api.ItemContainer inv =
+            client.getItemContainer(net.runelite.api.InventoryID.INVENTORY);
+        if (inv == null) return;
+        net.runelite.api.Item[] items = inv.getItems();
+        for (int slot = 0; slot < items.length; slot++)
+        {
+            if (items[slot] == null) continue;
+            int id = items[slot].getId();
+            for (int targetId : itemIds)
+            {
+                if (id == targetId)
+                {
+                    client.menuAction(slot, net.runelite.api.widgets.WidgetInfo.INVENTORY.getId(),
+                        MenuAction.CC_OP, 7, id, "Drop", "");
+                    break;
+                }
+            }
+        }
+        log.debug("dropAll complete for {} item types", itemIds.length);
+    }
+
+    /**
      * Uses one inventory item on another inventory item.
      * Fires ITEM_USE on slot1 then ITEM_USE_ON_WIDGET on slot2.
      * Used to open production dialogues (chisel+gem, knife+log, etc.)

@@ -47,9 +47,10 @@ public class WoodcuttingScript extends BotScript
     private enum State { FIND_TREE, CHOPPING, DROPPING, BANKING }
 
     private State state = State.FIND_TREE;
-    private String  treeNameFilter = "";
-    private boolean bankingMode    = false;
-    private boolean pickupNests    = true;
+    private String  treeNameFilter  = "";
+    private boolean bankingMode     = false;
+    private boolean pickupNests     = true;
+    private boolean hopOnCompetition = false;
     private WorldPoint homeTile;
 
     @Inject
@@ -61,9 +62,10 @@ public class WoodcuttingScript extends BotScript
     @Override
     public void configure(BotEngineConfig config)
     {
-        treeNameFilter = config.woodcuttingTreeName().trim();
-        bankingMode    = config.woodcuttingBankingMode();
-        pickupNests    = config.woodcuttingPickupNests();
+        treeNameFilter   = config.woodcuttingTreeName().trim();
+        bankingMode      = config.woodcuttingBankingMode();
+        pickupNests      = config.woodcuttingPickupNests();
+        hopOnCompetition = config.woodcuttingHopOnCompetition();
     }
 
     @Override
@@ -142,6 +144,14 @@ public class WoodcuttingScript extends BotScript
         if (inventory.isFull())
         {
             state = bankingMode ? State.BANKING : State.DROPPING;
+            return;
+        }
+
+        if (hopOnCompetition && players.nearbyCount(5) > 0)
+        {
+            log.info("Competition detected — hopping world");
+            worldHopper.hopToMembers();
+            state = State.FIND_TREE;
             return;
         }
 

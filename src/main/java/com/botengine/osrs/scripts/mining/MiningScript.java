@@ -46,7 +46,9 @@ public class MiningScript extends BotScript
     private State state = State.FIND_ROCK;
     private int   idleTickCount  = 0;
     private String rockNameFilter = "";
-    private boolean bankingMode  = false;
+    private boolean bankingMode       = false;
+    private boolean shiftDrop         = false;
+    private boolean hopOnCompetition  = false;
     private WorldPoint homeTile;
 
     @Inject
@@ -58,8 +60,10 @@ public class MiningScript extends BotScript
     @Override
     public void configure(BotEngineConfig config)
     {
-        rockNameFilter = config.miningRockName().trim();
-        bankingMode    = config.miningBankingMode();
+        rockNameFilter   = config.miningRockName().trim();
+        bankingMode      = config.miningBankingMode();
+        shiftDrop        = config.miningShiftDrop();
+        hopOnCompetition = config.miningHopOnCompetition();
     }
 
     @Override
@@ -118,6 +122,14 @@ public class MiningScript extends BotScript
             return;
         }
 
+        if (hopOnCompetition && players.nearbyCount(5) > 0)
+        {
+            log.info("Competition detected — hopping world");
+            worldHopper.hopToMembers();
+            state = State.FIND_ROCK;
+            return;
+        }
+
         if (!isActivelyMining())
         {
             idleTickCount++;
@@ -136,6 +148,13 @@ public class MiningScript extends BotScript
 
     private void dropOre()
     {
+        if (shiftDrop)
+        {
+            interaction.dropAll(ORE_IDS);
+            antiban.reactionDelay();
+            state = State.FIND_ROCK;
+            return;
+        }
         boolean droppedAny = false;
         for (int oreId : ORE_IDS)
         {
