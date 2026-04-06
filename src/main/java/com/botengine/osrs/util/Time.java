@@ -2,6 +2,7 @@ package com.botengine.osrs.util;
 
 import lombok.extern.slf4j.Slf4j;
 
+import javax.inject.Singleton;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -16,6 +17,7 @@ import java.util.function.BooleanSupplier;
  * Use these for short waits (e.g. waiting for an animation to start).
  */
 @Slf4j
+@Singleton
 public class Time
 {
     /** One game tick in milliseconds. */

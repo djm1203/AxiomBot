@@ -9,7 +9,7 @@ How to load and test the Bot Engine plugin in RuneLite.
 - RuneLite source cloned to `Personal/Github/runelite/` (Gradle-based, tag `1.12.23`)
 - Java 11+ on your PATH
 - Maven 3.x on your PATH
-- Bot Engine JAR built: `mvn package` in the project root
+- Bot Engine JAR built: `mvn clean package` in the project root
 
 The fat JAR will be at:
 ```
@@ -18,119 +18,120 @@ target/bot-engine-osrs-1.0-SNAPSHOT.jar
 
 ---
 
-## Step 1 — Build RuneLite in developer mode
+## Running the client with developer mode
 
-RuneLite must be launched with `--developer-mode` to allow loading external plugin JARs.
+Developer mode is required for sideloaded plugins to load. The Jagex Launcher blocks developer mode by setting a system property, so you must run the source-built client directly.
 
-In `Personal/Github/runelite/`:
+### One-time setup: get Jagex credentials on disk
+
+The source-built client needs credentials from your logged-in Jagex account. Do this once:
+
+1. **Set the `RUNELITE_ARGS` environment variable permanently:**
+   ```powershell
+   [System.Environment]::SetEnvironmentVariable('RUNELITE_ARGS', '--insecure-write-credentials', 'User')
+   ```
+
+2. **Restart the Jagex Launcher** (close fully from system tray), then launch OSRS normally. RuneLite will write your session to `~/.runelite/credentials.properties`.
+
+3. **Verify the file was created:**
+   ```powershell
+   cat "$HOME/.runelite/credentials.properties"
+   ```
+   Should show `JX_SESSION_ID`, `JX_CHARACTER_ID`, `JX_DISPLAY_NAME`.
+
+You only need to do this once. The credentials.properties file persists between sessions (re-run step 2 when the session expires and you get login errors).
+
+### Deploying the plugin
+
+Copy the JAR to the sideloaded-plugins directory (RuneLite scans this on startup):
 ```bash
-./gradlew :runelite-client:run --args="--developer-mode"
+cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
 ```
 
-On Windows without a Unix shell:
-```cmd
-gradlew.bat :runelite-client:run --args="--developer-mode"
+### Launching the client
+
+```bash
+java -ea -jar "C:\Users\dmart\Documents\Personal\Github\runelite\runelite-client\build\libs\client-1.12.24-SNAPSHOT-shaded.jar" --developer-mode
 ```
 
-This launches the RuneLite client with all developer features enabled.
-
----
-
-## Step 2 — Load the plugin JAR
-
-With RuneLite running in developer mode:
-
-1. Click the **wrench icon** (Plugin Hub) in the RuneLite sidebar
-2. Click **"..."** menu at the top-right of the Plugin Hub panel
-3. Select **"Load plugin from file"**
-4. Navigate to and select `target/bot-engine-osrs-1.0-SNAPSHOT.jar`
-5. The "Bot Engine" plugin will appear in the plugin list — enable it
-
-If "Load plugin from file" is not visible, confirm that RuneLite launched with `--developer-mode`.
-
----
-
-## Step 3 — Verify the plugin loaded
-
-Once enabled:
-- A **robot icon** should appear in the RuneLite navigation sidebar
-- Click it to open the **Bot Engine panel** (script selector + Start/Pause/Stop buttons)
-- Open RuneLite's config panel and search "Bot Engine" — antiban and debug settings should appear
-
-If the panel doesn't appear, check the RuneLite console (View → Show Client Log) for errors.
-
----
-
-## Step 4 — Enable debug overlay
-
-Before testing any scripts:
-
-1. Go to Plugin Config → Bot Engine → Debug → enable **"Show debug overlay"**
-2. The debug overlay appears in the top-right of the game viewport showing:
-   - Current script name and state
-   - Player position (X, Y coordinates)
-   - Number of visible NPCs
-   - Green tile outline under your player
-   - Yellow bounding boxes on nearby NPCs
-
-This is your main diagnostic tool during testing.
-
----
-
-## Step 5 — Test each script
-
-### Recommended test order (simplest → most complex)
-
-**1. High Alchemy** (no movement, pure inventory)
-- Fill inventory with nature runes + items to alch
-- Have fire runes or a fire staff equipped
-- Select "High Alchemy" → Start
-- Should alch one item every ~3 ticks (1.8 seconds)
-- Verify: items disappear, GP increases, state label shows "Running"
-
-**2. Woodcutting** (world interaction, object click)
-- Stand near some trees
-- Select "Woodcutting" → Start
-- Should click "Chop down" on nearest tree, chop, drop logs when full, repeat
-- Verify: player animates, logs accumulate then drop, finds new tree after depletion
-
-**3. Fishing** (NPC target)
-- Stand near fishing spots
-- Select "Fishing" → Start
-- Should click spot with "Lure"/"Bait"/etc., power-fish, drop fish when full
-- Verify: player faces spot, catch accumulates, drops when full, re-finds spot
-
-**4. Mining** (world object, rock depletion)
-- Stand near ore rocks
-- Select "Mining" → Start
-- Verify rock depletion is detected (player goes idle, finds new rock)
-
-**5. Combat** (NPC attack + eating)
-- Stand near Sand Crabs (NPC IDs 1266/1267) or similar
-- Have food in inventory
-- Select "Combat" → Start
-- Verify: attacks target, eats when below 50% HP, re-attacks after kill
-
-**6. Cooking, Smithing, Fletching, Gem Cutting**
-- These all use the Make-All production dialogue
-- Verify the dialogue opens and "Make All" is clicked correctly
-- Watch the state label — should go to "Running" while the production animation plays
-
----
-
-## Checking logs
-
-RuneLite console (View → Show Client Log) shows all bot engine log output:
-
+The log should show:
 ```
-[BotEngine] [Woodcutting] Started — power-chop mode (drop logs when full)
-[BotEngine] [Woodcutting] Chopping tree (id=1276)
-[BotEngine] [Woodcutting] Inventory full — dropping logs
-[BotEngine] Break started — pausing Woodcutting
-[BotEngine] Break complete — resuming Woodcutting
+Side-loading plugin ...bot-engine-osrs-1.0-SNAPSHOT.jar
+Bot Engine ready
 ```
 
-Enable "Verbose logging" in config to see debug-level output including every click, slot lookup, and state transition.
+If you see `read N credentials from disk`, the Jagex session was loaded successfully and you should be logged in.
+
+---
+
+## After code changes
+
+```bash
+mvn clean package
+cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
+# Restart the client (full close + re-run the java command)
+```
+
+Maven caches compiled classes — always use `mvn clean package` (not just `mvn package`) after editing source files to guarantee the new code is picked up.
+
+---
+
+## Enabling debug overlay
+
+1. Plugin Config → Bot Engine → Debug → enable **"Show debug overlay"**
+2. The overlay shows current script, state, player position, NPC count, tile/NPC bounding boxes
+
+Use this to verify the script is finding targets — if NPC count is 0 when standing next to mobs, the NPC API is broken. If count > 0 but the script isn't attacking, the NPC ID filter is wrong.
+
+---
+
+## Reading logs
+
+All bot output goes to the terminal where you launched the client (not the in-game chat). Look for lines prefixed with `BotEngine`:
+
+```
+[BotEngine] Starting script: Combat
+[BotEngine] onLoop state=FIND_TARGET npcsInScene=4
+[BotEngine] FIND_TARGET: nearest=Hill Giant/2099
+[BotEngine] Attacking NPC id=2099 name=Hill Giant
+```
+
+If `onLoop` never appears after starting, the EventBus subscription failed.
+If `FIND_TARGET: nearest=null` appears, the NPC ID is wrong or the mob is out of range.
+
+---
+
+## Testing each script
+
+### Combat — Hill Giants (Edgeville dungeon)
+- NPC ID: `2099`
+- Stand next to the giants, have any food in inventory
+- Select Combat → Start
+- The script sends direct `menuAction` packets — **the cursor does not move**, this is correct behavior
+- Verify: attack animation starts, HP bar appears on the giant
+
+### Woodcutting
+- Have an axe in inventory or equipped
+- Stand next to any trees
+- TREE_IDS in WoodcuttingScript: `1276` (regular), `1278` (oak), etc.
+- Verify: chop animation, logs appear, inventory drops when full
+
+### High Alchemy
+- Inventory: nature runes + items to alch, fire runes or fire staff equipped
+- Select Alchemy → Start
+- Should cast every ~1.8 seconds
+
+### Fishing
+- Stand at fishing spots
+- Verify: click on spot, fish accumulate, drop when full
+
+### Mining
+- Stand at ore rocks
+- Verify: mine animation, ore accumulates, rock depletion detected (goes idle, finds new rock)
+
+### Cooking, Smithing, Fletching, Gem Cutting
+- These use the Make-All production dialogue
+- Verify the dialogue opens and "Make All" is clicked
 
 ---
 
@@ -138,42 +139,29 @@ Enable "Verbose logging" in config to see debug-level output including every cli
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Panel doesn't appear | JAR not loaded / plugin disabled | Re-load JAR, enable in plugin list |
-| Script starts but nothing happens | Standing too far from target | Move closer, try again |
-| "No tree found nearby" in logs | Wrong tree IDs for your location | Add IDs to `TREE_IDS` in WoodcuttingScript |
-| High Alchemy doesn't fire | Missing runes or no alchable items | Check inventory |
-| Production dialogue doesn't open | Object or NPC not found | Enable debug overlay to check targeting |
-| NullPointerException in logs | Logged by ScriptRunner, script auto-stopped | Check logs for which line failed |
+| Plugin not in sidebar | JAR not in sideloaded-plugins or client not in dev mode | Re-copy JAR, re-run with `--developer-mode` |
+| "read 0 credentials from disk" / login screen | credentials.properties missing or expired | Redo the one-time Jagex credentials setup above |
+| Script starts, nothing happens, no logs | onLoop not being called | Verify EventBus.register(scriptRunner) in plugin startup log |
+| `FIND_TARGET: nearest=null` in logs | NPC ID mismatch | Check actual NPC ID with NPC Indicators plugin, update array |
+| Attack called but no animation | Wrong MenuAction type | Combat NPCs: NPC_FIRST_OPTION; some quest NPCs: NPC_SECOND_OPTION |
+| Production dialogue doesn't open | Object/NPC not found | Enable debug overlay, check NPC count and targeting |
+| NullPointerException in logs | Script auto-stopped | Check full stack trace in terminal for the failing line |
 
 ---
 
-## Adding support for new object/NPC IDs
+## Finding NPC and object IDs
 
-If a script doesn't find its target at your location, the object ID may not be in the script's array.
+The fastest method: install RuneLite's **NPC Indicators** plugin, right-click any NPC → "Tag" → hover the tag to see its ID.
 
-1. Enable debug overlay — it shows NPC IDs and object info
-2. Alternatively, use the RuneLite "Object Markers" or "NPC Indicators" plugins to see IDs
-3. Add the ID to the relevant array in the script (e.g., `TREE_IDS` in `WoodcuttingScript`)
-4. Rebuild with `mvn package` and reload the JAR
+For game objects: install **Object Markers** plugin, right-click any object → "Mark" to see the object ID.
+
+Alternative: enable the debug overlay — it shows NPC IDs and tile info for everything near the player.
 
 ---
 
-## Antiban behavior during testing
+## Antiban during testing
 
-With default settings, the first break is scheduled 45 minutes (±20%) into the session. During testing you may want to shorten this to verify the break cycle works:
-
+With defaults, the first break fires after ~45 minutes. To test the break cycle sooner:
 - Set "Break every" to 1 minute in config
-- Run a script for 1-2 minutes
-- The state label should change to "Breaking" and the overlay should show break info
-- After the break duration, it should resume automatically
-
----
-
-## Re-loading after code changes
-
-After modifying and rebuilding (`mvn package`):
-1. Disable the plugin in RuneLite's plugin list
-2. Use "Load plugin from file" again to re-load the new JAR
-3. Re-enable the plugin
-
-RuneLite does not hot-reload — a full disable/re-load cycle is required.
+- Watch for `[BotEngine] Taking antiban break` in logs
+- Script should pause then auto-resume after the break duration

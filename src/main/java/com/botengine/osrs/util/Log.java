@@ -4,6 +4,8 @@ import lombok.Setter;
 import org.slf4j.LoggerFactory;
 import org.slf4j.helpers.MessageFormatter;
 
+import javax.inject.Singleton;
+
 /**
  * Unified logging wrapper for the bot engine.
  *
@@ -18,6 +20,7 @@ import org.slf4j.helpers.MessageFormatter;
  *   [BotEngine] [Woodcutting] Tree depleted — finding next target
  *   [BotEngine] Break started — resuming in 8 minutes
  */
+@Singleton
 public class Log
 {
     private static final org.slf4j.Logger logger =

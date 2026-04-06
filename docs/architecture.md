@@ -38,12 +38,19 @@ Parameters by interaction type:
 | Interaction | p0 | p1 | action | id | itemId | option | target |
 |-------------|----|----|--------|----|--------|--------|--------|
 | Click tree | sceneX | sceneY | GAME_OBJECT_FIRST_OPTION | objectId | -1 | "Chop down" | "Tree" |
-| Click NPC | 0 | 0 | NPC_FIRST_OPTION | npc.getIndex() | -1 | "Lure" | "Fishing spot" |
+| Attack NPC | -1 | npc.getIndex() | NPC_FIRST_OPTION | npc.getIndex() | -1 | "Attack" | npc name |
+| Click fishing spot | -1 | npc.getIndex() | NPC_FIRST_OPTION | npc.getIndex() | -1 | "Lure" | "Fishing spot" |
 | Drop item | slot | INVENTORY_id | CC_OP | 7 | itemId | "Drop" | "" |
 | Cast spell | -1 | widgetId | CC_OP | 1 | -1 | "Cast" | "" |
 | Walk to tile | sceneX | sceneY | WALK | 0 | -1 | "Walk here" | "" |
 
-Key: NPC interactions use `npc.getIndex()` (position in NPC table), not `npc.getId()` (the NPC type ID).
+**Key distinctions:**
+- For **NPC interactions**: p0=`-1` (unused), p1=`npc.getIndex()`, id=`npc.getIndex()`. The NPC index (slot in the server NPC table) goes in BOTH p1 and id. Using `0,0` for p0/p1 causes the action to be silently rejected.
+- `NPC_FIRST_OPTION` = the left-click (default) action. For combat monsters, this is "Attack". For fishing spots this is "Lure"/"Bait"/etc.
+- `NPC_SECOND_OPTION` = first right-click option. Only needed when Attack is NOT the default left-click action.
+- For **game objects**: p0=sceneX, p1=sceneY (tile coordinates), id=`obj.getId()` (the type ID, not an index).
+- NPC interactions use `npc.getIndex()` (slot in the NPC table), **not** `npc.getId()` (the NPC type/template ID).
+- `menuAction()` sends a direct server packet — **the mouse cursor does not move**. This is correct and expected behavior.
 
 ---
 
