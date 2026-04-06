@@ -1,6 +1,8 @@
 package com.botengine.osrs.script;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.Bank;
+import com.botengine.osrs.api.Camera;
 import com.botengine.osrs.api.Combat;
 import com.botengine.osrs.api.GameObjects;
 import com.botengine.osrs.api.Interaction;
@@ -64,6 +66,7 @@ public abstract class BotScript
     protected Interaction interaction;
     protected Magic magic;
     protected Combat combat;
+    protected Camera camera;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     protected Antiban antiban;
@@ -85,6 +88,7 @@ public abstract class BotScript
         Interaction interaction,
         Magic magic,
         Combat combat,
+        Camera camera,
         Antiban antiban,
         Time time,
         Log log
@@ -100,10 +104,24 @@ public abstract class BotScript
         this.interaction = interaction;
         this.magic = magic;
         this.combat = combat;
+        this.camera = camera;
         this.antiban = antiban;
         this.time = time;
         this.log = log;
     }
+
+    // ── Optional configuration ────────────────────────────────────────────────
+
+    /**
+     * Called by ScriptRunner after inject() and before onStart() to pass the
+     * current plugin config to the script. Scripts that have configurable settings
+     * (e.g. target NPC name, eat threshold) should override this and read their
+     * values from config.
+     *
+     * Default implementation is a no-op — scripts that don't need config don't
+     * need to override this.
+     */
+    public void configure(BotEngineConfig config) {}
 
     // ── Contract every script must implement ─────────────────────────────────
 

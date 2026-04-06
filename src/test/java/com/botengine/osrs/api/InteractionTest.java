@@ -1,5 +1,6 @@
 package com.botengine.osrs.api;
 
+import com.botengine.osrs.util.Mouse;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
 import net.runelite.api.InventoryID;
@@ -39,6 +40,7 @@ import static org.mockito.Mockito.*;
 class InteractionTest
 {
     @Mock private Client client;
+    @Mock private Mouse mouse;
     @Mock private GameObject gameObject;
     @Mock private ObjectComposition objectDef;
     @Mock private NPC npc;
@@ -49,7 +51,7 @@ class InteractionTest
     @BeforeEach
     void setUp()
     {
-        interaction = new Interaction(client);
+        interaction = new Interaction(client, mouse);
     }
 
     // ── click(GameObject) ─────────────────────────────────────────────────────
@@ -88,7 +90,7 @@ class InteractionTest
     // ── click(NPC) ────────────────────────────────────────────────────────────
 
     @Test
-    void clickNpc_usesFirstOptionAndNpcIndex()
+    void clickNpc_delegatesToMouseClick()
     {
         when(npc.getId()).thenReturn(1530);
         when(npc.getIndex()).thenReturn(42);
@@ -96,13 +98,10 @@ class InteractionTest
 
         interaction.click(npc, "Lure");
 
-        verify(client).menuAction(
-            eq(0), eq(0),
-            eq(MenuAction.NPC_FIRST_OPTION),
-            eq(42),   // index, not id
-            eq(-1),
-            eq("Lure"),
-            eq("Fishing spot")
+        // NPC clicks use a real Robot click, not menuAction
+        verify(mouse).click(npc);
+        verify(client, never()).menuAction(
+            anyInt(), anyInt(), any(MenuAction.class), anyInt(), anyInt(), anyString(), anyString()
         );
     }
 

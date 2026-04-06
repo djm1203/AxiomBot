@@ -1,5 +1,6 @@
 package com.botengine.osrs.scripts.mining;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
 import net.runelite.api.GameObject;
 
@@ -66,6 +67,9 @@ public class MiningScript extends BotScript
     private State state = State.FIND_ROCK;
     private int idleTickCount = 0;
 
+    /** Rock name filter from config — empty means accept any rock in ROCK_IDS. */
+    private String rockNameFilter = "";
+
     @Inject
     public MiningScript() {}
 
@@ -73,9 +77,16 @@ public class MiningScript extends BotScript
     public String getName() { return "Mining"; }
 
     @Override
+    public void configure(BotEngineConfig config)
+    {
+        rockNameFilter = config.miningRockName().trim();
+    }
+
+    @Override
     public void onStart()
     {
-        log.info("Started — power-mining mode (drop ore when full)");
+        String target = rockNameFilter.isEmpty() ? "any rock" : rockNameFilter;
+        log.info("Started — power-mining mode, target: {}", target);
         state = State.FIND_ROCK;
     }
 
@@ -114,7 +125,7 @@ public class MiningScript extends BotScript
             return;
         }
 
-        GameObject rock = gameObjects.nearest(ROCK_IDS);
+        GameObject rock = findRock();
         if (rock == null)
         {
             log.debug("No ore rock found nearby — waiting");
@@ -136,7 +147,7 @@ public class MiningScript extends BotScript
             return;
         }
 
-        if (players.isIdle())
+        if (!isActivelyMining())
         {
             idleTickCount++;
             if (idleTickCount >= 2)
@@ -151,6 +162,37 @@ public class MiningScript extends BotScript
         {
             idleTickCount = 0;
         }
+    }
+
+    private GameObject findRock()
+    {
+        if (rockNameFilter.isEmpty())
+        {
+            return gameObjects.nearest(ROCK_IDS);
+        }
+        final String filter = rockNameFilter.toLowerCase();
+        return gameObjects.nearest(obj -> {
+            for (int id : ROCK_IDS)
+            {
+                if (obj.getId() == id)
+                {
+                    net.runelite.api.ObjectComposition def = client.getObjectDefinition(obj.getId());
+                    return def != null && def.getName() != null
+                        && def.getName().toLowerCase().contains(filter);
+                }
+            }
+            return false;
+        });
+    }
+
+    private boolean isActivelyMining()
+    {
+        int anim = players.getAnimation();
+        for (int mineAnim : MINE_ANIMATIONS)
+        {
+            if (anim == mineAnim) return true;
+        }
+        return false;
     }
 
     private void dropOre()

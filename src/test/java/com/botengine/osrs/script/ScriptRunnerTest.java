@@ -1,6 +1,8 @@
 package com.botengine.osrs.script;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.*;
+import com.botengine.osrs.overlay.BotOverlay;
 import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
@@ -37,9 +39,12 @@ class ScriptRunnerTest
     @Mock private Interaction interaction;
     @Mock private Magic magic;
     @Mock private Combat combat;
+    @Mock private Camera camera;
     @Mock private Antiban antiban;
     @Mock private Time time;
     @Mock private Log botLog;
+    @Mock private BotEngineConfig config;
+    @Mock private BotOverlay botOverlay;
 
     private ScriptRunner runner;
     private GameTick tick;
@@ -49,8 +54,8 @@ class ScriptRunnerTest
     {
         runner = new ScriptRunner(
             client, players, npcs, gameObjects, inventory,
-            bank, movement, interaction, magic, combat,
-            antiban, time, botLog
+            bank, movement, interaction, magic, combat, camera,
+            antiban, time, botLog, config, botOverlay
         );
         tick = new GameTick();
         // Default: no break pending, no break over
@@ -201,11 +206,15 @@ class ScriptRunnerTest
     // ── Error handling ────────────────────────────────────────────────────────
 
     @Test
-    void onGameTick_onLoopException_stopsRunner()
+    void onGameTick_onLoopException_stopsRunnerAfterMaxErrors()
     {
         BotScript script = makeThrowingScript(new RuntimeException("script crash"));
         runner.start(script);
-        runner.onGameTick(tick);
+        // ScriptRunner stops after MAX_CONSECUTIVE_ERRORS (5) consecutive failures
+        for (int i = 0; i < 5; i++)
+        {
+            runner.onGameTick(tick);
+        }
         assertEquals(ScriptState.STOPPED, runner.getState());
     }
 

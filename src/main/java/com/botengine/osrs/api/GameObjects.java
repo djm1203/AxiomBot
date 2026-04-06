@@ -86,6 +86,7 @@ public class GameObjects
      */
     public GameObject nearest(Predicate<GameObject> filter)
     {
+        if (client.getLocalPlayer() == null) return null;
         WorldPoint playerPos = client.getLocalPlayer().getWorldLocation();
         return getAll().stream()
             .filter(filter)
@@ -109,6 +110,7 @@ public class GameObjects
      */
     public List<GameObject> all(Predicate<GameObject> filter)
     {
+        if (client.getLocalPlayer() == null) return java.util.Collections.emptyList();
         WorldPoint playerPos = client.getLocalPlayer().getWorldLocation();
         return getAll().stream()
             .filter(filter)
@@ -132,6 +134,7 @@ public class GameObjects
      */
     public GameObject nearestWithin(int id, int maxDistance)
     {
+        if (client.getLocalPlayer() == null) return null;
         WorldPoint playerPos = client.getLocalPlayer().getWorldLocation();
         return nearest(obj -> obj.getId() == id
             && obj.getWorldLocation().distanceTo(playerPos) <= maxDistance);

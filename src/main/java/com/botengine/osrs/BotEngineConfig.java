@@ -13,8 +13,12 @@ import net.runelite.client.config.Range;
  * Values are persisted to ~/.runelite/config.ini across sessions.
  *
  * Sections:
- *   - Antiban   — break scheduling and human-like timing
- *   - Debug     — developer overlays and logging
+ *   - Antiban    — break scheduling and human-like timing
+ *   - Combat     — target NPC name, food, HP threshold
+ *   - Woodcutting — tree type filter
+ *   - Mining     — ore type filter
+ *   - Fishing    — fishing action
+ *   - Debug      — developer overlays and logging
  */
 @ConfigGroup("botengine")
 public interface BotEngineConfig extends Config
@@ -67,12 +71,94 @@ public interface BotEngineConfig extends Config
     )
     default boolean antibanEnabled() { return true; }
 
+    // ── Combat section ────────────────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Combat",
+        description = "Settings for the Combat script",
+        position = 2
+    )
+    String combatSection = "combat";
+
+    @ConfigItem(
+        keyName = "combatTarget",
+        name = "Target NPC name",
+        description = "Name of the NPC to attack (e.g. Hill Giant, Sand Crab, Moss Giant)",
+        section = combatSection,
+        position = 0
+    )
+    default String combatTarget() { return "Hill Giant"; }
+
+    @ConfigItem(
+        keyName = "combatEatPercent",
+        name = "Eat below HP %",
+        description = "Eat food when HP drops at or below this percentage",
+        section = combatSection,
+        position = 1
+    )
+    @Range(min = 10, max = 95)
+    default int combatEatPercent() { return 50; }
+
+    // ── Woodcutting section ───────────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Woodcutting",
+        description = "Settings for the Woodcutting script",
+        position = 3
+    )
+    String woodcuttingSection = "woodcutting";
+
+    @ConfigItem(
+        keyName = "woodcuttingTreeName",
+        name = "Tree name filter",
+        description = "Only chop trees whose name contains this text (e.g. Oak, Willow, Yew). Leave blank for nearest tree of any type.",
+        section = woodcuttingSection,
+        position = 0
+    )
+    default String woodcuttingTreeName() { return ""; }
+
+    // ── Mining section ────────────────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Mining",
+        description = "Settings for the Mining script",
+        position = 4
+    )
+    String miningSection = "mining";
+
+    @ConfigItem(
+        keyName = "miningRockName",
+        name = "Rock name filter",
+        description = "Only mine rocks whose name contains this text (e.g. Iron, Coal, Mithril). Leave blank for nearest rock of any type.",
+        section = miningSection,
+        position = 0
+    )
+    default String miningRockName() { return ""; }
+
+    // ── Fishing section ───────────────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Fishing",
+        description = "Settings for the Fishing script",
+        position = 5
+    )
+    String fishingSection = "fishing";
+
+    @ConfigItem(
+        keyName = "fishingAction",
+        name = "Click action",
+        description = "The menu option to use on the fishing spot (e.g. Lure, Bait, Net, Cage, Harpoon)",
+        section = fishingSection,
+        position = 0
+    )
+    default String fishingAction() { return "Lure"; }
+
     // ── Debug section ─────────────────────────────────────────────────────────
 
     @ConfigSection(
         name = "Debug",
         description = "Developer tools and debug overlays",
-        position = 1
+        position = 6
     )
     String debugSection = "debug";
 

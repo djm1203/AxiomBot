@@ -67,8 +67,8 @@ public class BotOverlay extends Overlay
         BotScript script = scriptRunner.getActiveScript();
         String scriptName = script != null ? script.getName() : "Unknown";
 
-        // Track session start time
-        if (scriptStartTime == 0 || state == ScriptState.STOPPED)
+        // Track session start time — only initialise on first render after script starts
+        if (scriptStartTime == 0)
         {
             scriptStartTime = System.currentTimeMillis();
         }
@@ -101,27 +101,35 @@ public class BotOverlay extends Overlay
         // Break info row
         if (state == ScriptState.BREAKING)
         {
-            long breakRemaining = antiban.sessionElapsedMs(); // placeholder
+            long remainingMs = Math.max(0, antiban.getBreakEndMs() - System.currentTimeMillis());
+            long remainingMin = remainingMs / 1000 / 60;
+            long remainingSec = (remainingMs / 1000) % 60;
             panel.getChildren().add(LineComponent.builder()
                 .left("Break ends")
                 .leftColor(COLOR_LABEL)
-                .right("soon")
+                .right(String.format("%dm %ds", remainingMin, remainingSec))
                 .rightColor(COLOR_BREAKING)
                 .build());
         }
         else
         {
-            long untilBreak = Math.max(0,
-                (antiban.sessionElapsedMs() / 1000 / 60));
+            long untilBreakMs = Math.max(0, antiban.getNextBreakAtMs() - System.currentTimeMillis());
+            long untilBreakMin = untilBreakMs / 1000 / 60;
             panel.getChildren().add(LineComponent.builder()
                 .left("Next break")
                 .leftColor(COLOR_LABEL)
-                .right(untilBreak + " min")
+                .right(untilBreakMin + " min")
                 .rightColor(Color.LIGHT_GRAY)
                 .build());
         }
 
         return panel.render(graphics);
+    }
+
+    /** Called by ScriptRunner when a script starts so the runtime clock resets. */
+    public void resetStartTime()
+    {
+        scriptStartTime = 0;
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ package com.botengine.osrs.util;
 import lombok.Setter;
 import net.runelite.api.Point;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
 import java.awt.geom.Point2D;
 import java.util.Random;
 
@@ -22,6 +24,7 @@ import java.util.Random;
  * All timing values have randomness built in so patterns are never identical
  * across sessions.
  */
+@Singleton
 public class Antiban
 {
     private static final Random random = new Random();
@@ -91,7 +94,12 @@ public class Antiban
      */
     public boolean isBreakOver()
     {
-        return System.currentTimeMillis() >= breakEndMs;
+        if (System.currentTimeMillis() >= breakEndMs)
+        {
+            scheduleNextBreak(); // schedule the next break immediately so the cycle continues
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -157,8 +165,8 @@ public class Antiban
      */
     public Point mouseJitter(Point point)
     {
-        int dx = (int) (random.nextGaussian() * jitterRadius);
-        int dy = (int) (random.nextGaussian() * jitterRadius);
+        int dx = clamp((int) (random.nextGaussian() * jitterRadius), -2 * jitterRadius, 2 * jitterRadius);
+        int dy = clamp((int) (random.nextGaussian() * jitterRadius), -2 * jitterRadius, 2 * jitterRadius);
         return new Point(point.getX() + dx, point.getY() + dy);
     }
 
@@ -203,5 +211,22 @@ public class Antiban
     public long sessionElapsedMs()
     {
         return System.currentTimeMillis() - sessionStartMs;
+    }
+
+    /** Returns the epoch-ms timestamp when the next break is scheduled. */
+    public long getNextBreakAtMs()
+    {
+        return nextBreakAtMs;
+    }
+
+    /** Returns the epoch-ms timestamp when the current break ends (0 if not on break). */
+    public long getBreakEndMs()
+    {
+        return breakEndMs;
+    }
+
+    private static int clamp(int value, int min, int max)
+    {
+        return Math.max(min, Math.min(max, value));
     }
 }

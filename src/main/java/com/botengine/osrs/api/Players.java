@@ -64,8 +64,11 @@ public class Players
     public boolean isIdle()
     {
         Player local = client.getLocalPlayer();
-        return local.getAnimation() == -1
-            && local.getPoseAnimation() == local.getPoseAnimationFrame();
+        if (local == null) return false;
+        // getAnimation() == -1 means no active action animation (woodcutting, fishing,
+        // combat, eating, etc.). Use Movement.isMoving() if you also need to check
+        // that the player isn't walking.
+        return local.getAnimation() == -1;
     }
 
     /**

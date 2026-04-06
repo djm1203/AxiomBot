@@ -1,5 +1,6 @@
 package com.botengine.osrs.scripts.fishing;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
 import net.runelite.api.NPC;
 
@@ -53,10 +54,23 @@ public class FishingScript extends BotScript
         11328 // Leaping trout/salmon/sturgeon
     };
 
+    // Fishing animation IDs (various rods/nets)
+    private static final int[] FISH_ANIMATIONS = {
+        623,  // Fly fishing rod / lure
+        622,  // Small net / bait
+        619,  // Harpoon
+        618,  // Cage
+        6705, // Barbarian rod
+        7331  // Aerial fishing
+    };
+
     private enum State { FIND_SPOT, FISHING, DROPPING }
 
     private State state = State.FIND_SPOT;
     private int idleTickCount = 0;
+
+    /** Click action from config — determines which fishing option to use. */
+    private String fishingAction = "Lure";
 
     @Inject
     public FishingScript() {}
@@ -65,9 +79,16 @@ public class FishingScript extends BotScript
     public String getName() { return "Fishing"; }
 
     @Override
+    public void configure(BotEngineConfig config)
+    {
+        String action = config.fishingAction().trim();
+        fishingAction = action.isEmpty() ? "Lure" : action;
+    }
+
+    @Override
     public void onStart()
     {
-        log.info("Started — power-fishing mode");
+        log.info("Started — power-fishing mode, action: {}", fishingAction);
         state = State.FIND_SPOT;
     }
 
@@ -113,7 +134,13 @@ public class FishingScript extends BotScript
             return;
         }
 
-        interaction.click(spot, "Lure");
+        boolean clicked = interaction.click(spot, fishingAction);
+        if (!clicked)
+        {
+            log.debug("Fishing spot off-screen — rotating camera toward it");
+            camera.rotateTo(spot.getWorldLocation());
+            return;
+        }
         antiban.reactionDelay();
         state = State.FISHING;
         idleTickCount = 0;
@@ -128,7 +155,7 @@ public class FishingScript extends BotScript
             return;
         }
 
-        if (players.isIdle())
+        if (!isActivelyFishing())
         {
             idleTickCount++;
             // Give a tick or two of grace before re-clicking (spot may have just moved)
@@ -143,6 +170,16 @@ public class FishingScript extends BotScript
         {
             idleTickCount = 0;
         }
+    }
+
+    private boolean isActivelyFishing()
+    {
+        int anim = players.getAnimation();
+        for (int fishAnim : FISH_ANIMATIONS)
+        {
+            if (anim == fishAnim) return true;
+        }
+        return false;
     }
 
     private void dropFish()

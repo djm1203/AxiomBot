@@ -22,13 +22,15 @@ import javax.inject.Inject;
 public class Combat
 {
     private final Client client;
+    private final Interaction interaction;
     private final Inventory inventory;
     private final Players players;
 
     @Inject
-    public Combat(Client client, Inventory inventory, Players players)
+    public Combat(Client client, Interaction interaction, Inventory inventory, Players players)
     {
         this.client = client;
+        this.interaction = interaction;
         this.inventory = inventory;
         this.players = players;
     }
@@ -36,18 +38,14 @@ public class Combat
     // ── Attacking ─────────────────────────────────────────────────────────────
 
     /**
-     * Attacks the given NPC.
-     * Uses NPC_SECOND_OPTION which is the "Attack" option on most combat NPCs.
+     * Attacks the given NPC. Returns true if the click was fired (NPC was on-screen),
+     * false if the NPC was off-screen and the click was skipped.
+     *
+     * Callers should only transition to an ATTACKING state when this returns true.
      */
-    public void attackNpc(NPC npc)
+    public boolean attackNpc(NPC npc)
     {
-        String name = npc.getName() != null ? npc.getName() : "";
-        client.menuAction(
-            0, 0,
-            MenuAction.NPC_SECOND_OPTION,
-            npc.getIndex(), -1,
-            "Attack", name
-        );
+        return interaction.click(npc, "Attack");
     }
 
     /**

@@ -79,6 +79,7 @@ public class Npcs
      */
     public NPC nearest(Predicate<NPC> filter)
     {
+        if (client.getLocalPlayer() == null) return null;
         WorldPoint playerPos = client.getLocalPlayer().getWorldLocation();
         return client.getNpcs().stream()
             .filter(npc -> npc != null && !npc.isDead())
@@ -103,6 +104,7 @@ public class Npcs
      */
     public List<NPC> all(Predicate<NPC> filter)
     {
+        if (client.getLocalPlayer() == null) return java.util.Collections.emptyList();
         WorldPoint playerPos = client.getLocalPlayer().getWorldLocation();
         return client.getNpcs().stream()
             .filter(npc -> npc != null && !npc.isDead())
@@ -119,6 +121,7 @@ public class Npcs
      */
     public NPC nearestWithin(int id, int maxDistance)
     {
+        if (client.getLocalPlayer() == null) return null;
         WorldPoint playerPos = client.getLocalPlayer().getWorldLocation();
         return nearest(npc -> npc.getId() == id
             && npc.getWorldLocation().distanceTo(playerPos) <= maxDistance);

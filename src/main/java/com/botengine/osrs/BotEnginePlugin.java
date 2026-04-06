@@ -15,7 +15,10 @@ import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
-import javax.swing.ImageIcon;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 
 /**
@@ -131,27 +134,25 @@ public class BotEnginePlugin extends Plugin
     // ── Internal ─────────────────────────────────────────────────────────────
 
     /**
-     * Loads the panel icon for the navigation button.
-     * Falls back to a blank 16x16 icon if the resource is missing.
+     * Generates the plugin icon programmatically — a green "B" on dark background.
+     * No resource file required; always renders correctly.
      */
     private BufferedImage loadIcon()
     {
-        try
-        {
-            java.awt.Image img = new ImageIcon(
-                BotEnginePlugin.class.getResource("/com/botengine/osrs/icon.png")
-            ).getImage();
-            return img instanceof BufferedImage ? (BufferedImage) img : blankIcon();
-        }
-        catch (Exception e)
-        {
-            log.warn("Could not load plugin icon, using blank", e);
-            return blankIcon();
-        }
-    }
+        BufferedImage img = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    private BufferedImage blankIcon()
-    {
-        return new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        // Dark background
+        g.setColor(new Color(30, 30, 30, 220));
+        g.fillRoundRect(0, 0, 16, 16, 4, 4);
+
+        // Green "B" label
+        g.setColor(new Color(0, 200, 100));
+        g.setFont(new Font("SansSerif", Font.BOLD, 11));
+        g.drawString("B", 3, 12);
+
+        g.dispose();
+        return img;
     }
 }

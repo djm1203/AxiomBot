@@ -1,6 +1,9 @@
 package com.botengine.osrs.script;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.Bank;
+import com.botengine.osrs.api.Camera;
+import com.botengine.osrs.overlay.BotOverlay;
 import com.botengine.osrs.api.Combat;
 import com.botengine.osrs.api.GameObjects;
 import com.botengine.osrs.api.Interaction;
@@ -17,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
+
+import javax.inject.Singleton;
 
 import javax.inject.Inject;
 
@@ -35,6 +40,7 @@ import javax.inject.Inject;
  *   when a new script is set. Scripts themselves do not use Guice.
  */
 @Slf4j
+@Singleton
 public class ScriptRunner
 {
     // ── RuneLite core ────────────────────────────────────────────────────────
@@ -50,18 +56,31 @@ public class ScriptRunner
     private final Interaction interaction;
     private final Magic magic;
     private final Combat combat;
+    private final Camera camera;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     private final Antiban antiban;
     private final Time time;
     private final Log botLog;
 
+    // ── Plugin config and overlay ─────────────────────────────────────────────
+    private final BotEngineConfig config;
+    private final BotOverlay botOverlay;
+
     // ── State ─────────────────────────────────────────────────────────────────
+    // volatile: written on AWT thread (start/stop/pause), read on Client thread (onGameTick)
     @Getter
-    private BotScript activeScript;
+    private volatile BotScript activeScript;
 
     @Getter
-    private ScriptState state = ScriptState.STOPPED;
+    private volatile ScriptState state = ScriptState.STOPPED;
+
+    /** State before entering a break — used to resume correctly (RUNNING vs PAUSED). */
+    private volatile ScriptState stateBeforeBreak = ScriptState.STOPPED;
+
+    /** Consecutive onLoop() errors — stops script after MAX_CONSECUTIVE_ERRORS. */
+    private int consecutiveErrors = 0;
+    private static final int MAX_CONSECUTIVE_ERRORS = 5;
 
     @Inject
     public ScriptRunner(
@@ -75,9 +94,12 @@ public class ScriptRunner
         Interaction interaction,
         Magic magic,
         Combat combat,
+        Camera camera,
         Antiban antiban,
         Time time,
-        Log botLog
+        Log botLog,
+        BotEngineConfig config,
+        BotOverlay botOverlay
     )
     {
         this.client = client;
@@ -90,9 +112,12 @@ public class ScriptRunner
         this.interaction = interaction;
         this.magic = magic;
         this.combat = combat;
+        this.camera = camera;
         this.antiban = antiban;
         this.time = time;
         this.botLog = botLog;
+        this.config = config;
+        this.botOverlay = botOverlay;
     }
 
     // ── GameTick handler ──────────────────────────────────────────────────────
@@ -110,7 +135,7 @@ public class ScriptRunner
                 if (antiban.isBreakOver())
                 {
                     botLog.info("Break complete — resuming " + activeScript.getName());
-                    state = ScriptState.RUNNING;
+                    state = stateBeforeBreak; // return to RUNNING or PAUSED as appropriate
                 }
                 return;
 
@@ -118,6 +143,7 @@ public class ScriptRunner
                 if (antiban.shouldTakeBreak())
                 {
                     botLog.info("Taking antiban break — pausing " + activeScript.getName());
+                    stateBeforeBreak = ScriptState.RUNNING;
                     state = ScriptState.BREAKING;
                     antiban.startBreak();
                     return;
@@ -126,11 +152,19 @@ public class ScriptRunner
                 try
                 {
                     activeScript.onLoop();
+                    consecutiveErrors = 0; // reset on clean tick
                 }
                 catch (Exception e)
                 {
-                    log.error("Script error in {}: {}", activeScript.getName(), e.getMessage(), e);
-                    stop();
+                    consecutiveErrors++;
+                    log.error("Script error in {} ({}/{}): {}",
+                        activeScript.getName(), consecutiveErrors, MAX_CONSECUTIVE_ERRORS,
+                        e.getMessage(), e);
+                    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS)
+                    {
+                        botLog.info("Script stopped after " + MAX_CONSECUTIVE_ERRORS + " consecutive errors");
+                        stop();
+                    }
                 }
                 break;
         }
@@ -152,13 +186,16 @@ public class ScriptRunner
         activeScript = script;
         activeScript.inject(
             client, players, npcs, gameObjects, inventory,
-            bank, movement, interaction, magic, combat,
+            bank, movement, interaction, magic, combat, camera,
             antiban, time, botLog
         );
+        activeScript.configure(config); // apply per-script settings from config panel
 
         botLog.info("Starting script: " + script.getName());
         activeScript.onStart();
         antiban.reset();
+        consecutiveErrors = 0;
+        botOverlay.resetStartTime();
         state = ScriptState.RUNNING;
     }
 
@@ -190,6 +227,7 @@ public class ScriptRunner
         if (state == ScriptState.RUNNING)
         {
             botLog.info("Pausing script: " + activeScript.getName());
+            stateBeforeBreak = ScriptState.PAUSED; // if break fires while paused, stay paused on resume
             state = ScriptState.PAUSED;
         }
     }

@@ -42,6 +42,7 @@ class AlchemyScriptTest
     @Mock private Interaction interaction;
     @Mock private Magic magic;
     @Mock private Combat combat;
+    @Mock private Camera camera;
     @Mock private Antiban antiban;
     @Mock private Time time;
     @Mock private Log log;
@@ -52,7 +53,7 @@ class AlchemyScriptTest
     {
         script = new AlchemyScript();
         script.inject(client, players, npcs, gameObjects, inventory,
-            bank, movement, interaction, magic, combat, antiban, time, log);
+            bank, movement, interaction, magic, combat, camera, antiban, time, log);
         script.onStart();
     }
 

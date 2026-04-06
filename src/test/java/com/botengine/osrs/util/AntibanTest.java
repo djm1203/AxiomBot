@@ -97,9 +97,9 @@ class AntibanTest
         int dx = Math.abs(jittered.getX() - original.getX());
         int dy = Math.abs(jittered.getY() - original.getY());
 
-        // Gaussian within 3σ means offset is almost always < 3*radius
-        assertTrue(dx <= 15 && dy <= 15,
-            "Jitter offset (" + dx + ", " + dy + ") exceeded 3x radius (radius=5)");
+        // Gaussian is clamped to ±2*radius, so offset never exceeds 2*radius
+        assertTrue(dx <= 10 && dy <= 10,
+            "Jitter offset (" + dx + ", " + dy + ") exceeded 2x radius (radius=5)");
     }
 
     @Test

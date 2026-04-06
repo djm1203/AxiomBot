@@ -1,5 +1,6 @@
 package com.botengine.osrs.api;
 
+import com.botengine.osrs.util.Mouse;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
@@ -34,11 +35,13 @@ import javax.inject.Inject;
 public class Interaction
 {
     private final Client client;
+    private final Mouse mouse;
 
     @Inject
-    public Interaction(Client client)
+    public Interaction(Client client, Mouse mouse)
     {
         this.client = client;
+        this.mouse = mouse;
     }
 
     // ── GameObjects ───────────────────────────────────────────────────────────
@@ -57,8 +60,8 @@ public class Interaction
      */
     public void click(GameObject obj, String action)
     {
-        String name = client.getObjectDefinition(obj.getId()).getName();
-        if (name == null) name = "";
+        net.runelite.api.ObjectComposition def = client.getObjectDefinition(obj.getId());
+        String name = (def != null && def.getName() != null) ? def.getName() : "";
 
         int sceneX = obj.getSceneMinLocation().getX();
         int sceneY = obj.getSceneMinLocation().getY();
@@ -81,29 +84,25 @@ public class Interaction
     /**
      * Interacts with an NPC using the first menu option.
      *
-     * p0 and p1 are 0 for NPC interactions — the client resolves position
-     * from the NPC's index in the NPC table.
-     *
-     * TODO: Support non-first options (NPC_SECOND_OPTION for Attack, etc.)
+     * For NPC interactions: p0 = -1 (unused), p1 = npc.getIndex(), id = npc.getIndex().
+     * The NPC index (slot in the server NPC table) identifies the target.
+     * Using 0,0 for p0/p1 causes the action to be silently rejected.
      *
      * @param npc    the NPC to interact with
-     * @param action the option text (e.g. "Talk-to", "Bank", "Attack")
+     * @param action the option text (e.g. "Talk-to", "Bank", "Attack", "Lure")
      */
-    public void click(NPC npc, String action)
+    /**
+     * Clicks an NPC using the given action. Returns true if the click was fired,
+     * false if the NPC was off-screen (caller should not transition state in that case).
+     */
+    public boolean click(NPC npc, String action)
     {
-        String name = npc.getName() != null ? npc.getName() : "";
-
         log.debug("click(NPC) id={} index={} name='{}' action='{}'",
-            npc.getId(), npc.getIndex(), name, action);
+            npc.getId(), npc.getIndex(), npc.getName() != null ? npc.getName() : "", action);
 
-        client.menuAction(
-            0, 0,
-            MenuAction.NPC_FIRST_OPTION,
-            npc.getIndex(),
-            -1,
-            action,
-            name
-        );
+        // Use a real Robot click. OSRS requires the cursor to be over the entity
+        // and processes it as a normal left-click — no menuAction parameters needed.
+        return mouse.click(npc);
     }
 
     // ── Ground items ──────────────────────────────────────────────────────────
@@ -273,8 +272,8 @@ public class Interaction
      */
     public void useItemOn(int itemId, int inventorySlot, GameObject target)
     {
-        String targetName = client.getObjectDefinition(target.getId()).getName();
-        if (targetName == null) targetName = "";
+        net.runelite.api.ObjectComposition targetDef = client.getObjectDefinition(target.getId());
+        String targetName = (targetDef != null && targetDef.getName() != null) ? targetDef.getName() : "";
 
         int sceneX = target.getSceneMinLocation().getX();
         int sceneY = target.getSceneMinLocation().getY();

@@ -43,6 +43,7 @@ class CombatScriptTest
     @Mock private Interaction interaction;
     @Mock private Magic magic;
     @Mock private Combat combat;
+    @Mock private Camera camera;
     @Mock private Antiban antiban;
     @Mock private Time time;
     @Mock private Log log;
@@ -55,7 +56,7 @@ class CombatScriptTest
     {
         script = new CombatScript();
         script.inject(client, players, npcs, gameObjects, inventory,
-            bank, movement, interaction, magic, combat, antiban, time, log);
+            bank, movement, interaction, magic, combat, camera, antiban, time, log);
         script.onStart();
     }
 
@@ -65,7 +66,7 @@ class CombatScriptTest
     void noTarget_doesNotAttack()
     {
         when(players.shouldEat(anyInt())).thenReturn(false);
-        when(npcs.nearest(any(int[].class))).thenReturn(null);
+        when(npcs.nearest(anyString())).thenReturn(null);
 
         script.onLoop();
 
@@ -76,8 +77,9 @@ class CombatScriptTest
     void targetFound_attacksNpc()
     {
         when(players.shouldEat(anyInt())).thenReturn(false);
-        when(npcs.nearest(any(int[].class))).thenReturn(target);
+        when(npcs.nearest(anyString())).thenReturn(target);
         when(target.isDead()).thenReturn(false);
+        when(combat.attackNpc(target)).thenReturn(true);
 
         script.onLoop();
 
@@ -88,7 +90,7 @@ class CombatScriptTest
     void deadTarget_isSkipped()
     {
         when(players.shouldEat(anyInt())).thenReturn(false);
-        when(npcs.nearest(any(int[].class))).thenReturn(target);
+        when(npcs.nearest(anyString())).thenReturn(target);
         when(target.isDead()).thenReturn(true);
 
         script.onLoop();
@@ -127,8 +129,9 @@ class CombatScriptTest
     void attack_callsReactionDelay()
     {
         when(players.shouldEat(anyInt())).thenReturn(false);
-        when(npcs.nearest(any(int[].class))).thenReturn(target);
+        when(npcs.nearest(anyString())).thenReturn(target);
         when(target.isDead()).thenReturn(false);
+        when(combat.attackNpc(target)).thenReturn(true);
 
         script.onLoop();
 
