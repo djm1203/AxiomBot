@@ -1,5 +1,6 @@
 package com.botengine.osrs;
 
+import com.botengine.osrs.overlay.BotOverlay;
 import com.botengine.osrs.script.BotScript;
 import com.botengine.osrs.script.ScriptRunner;
 import com.botengine.osrs.script.ScriptState;
@@ -58,6 +59,7 @@ public class BotEnginePanel extends PluginPanel
     private static final Color COLOR_BG     = new Color(40, 40, 40);
 
     private final ScriptRunner scriptRunner;
+    private final BotOverlay botOverlay;
 
     // Script registry: display name → Provider<BotScript>
     // Provider creates a fresh instance each time Start is clicked.
@@ -73,6 +75,7 @@ public class BotEnginePanel extends PluginPanel
     @Inject
     public BotEnginePanel(
         ScriptRunner scriptRunner,
+        BotOverlay botOverlay,
         Provider<WoodcuttingScript> woodcutting,
         Provider<AlchemyScript> alchemy,
         Provider<CraftingScript> crafting,
@@ -85,6 +88,7 @@ public class BotEnginePanel extends PluginPanel
     )
     {
         this.scriptRunner = scriptRunner;
+        this.botOverlay = botOverlay;
 
         // Register all scripts in display order
         scripts = new LinkedHashMap<>();
@@ -173,6 +177,7 @@ public class BotEnginePanel extends PluginPanel
         if (provider == null) return;
 
         BotScript script = provider.get();
+        botOverlay.resetStartTime();
         scriptRunner.start(script);
 
         updateButtons(ScriptState.RUNNING);

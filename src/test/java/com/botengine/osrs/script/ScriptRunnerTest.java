@@ -2,7 +2,6 @@ package com.botengine.osrs.script;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.*;
-import com.botengine.osrs.overlay.BotOverlay;
 import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
@@ -44,7 +43,6 @@ class ScriptRunnerTest
     @Mock private Time time;
     @Mock private Log botLog;
     @Mock private BotEngineConfig config;
-    @Mock private BotOverlay botOverlay;
 
     private ScriptRunner runner;
     private GameTick tick;
@@ -55,7 +53,7 @@ class ScriptRunnerTest
         runner = new ScriptRunner(
             client, players, npcs, gameObjects, inventory,
             bank, movement, interaction, magic, combat, camera,
-            antiban, time, botLog, config, botOverlay
+            antiban, time, botLog, config
         );
         tick = new GameTick();
         // Default: no break pending, no break over

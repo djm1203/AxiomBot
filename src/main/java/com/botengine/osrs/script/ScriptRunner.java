@@ -3,7 +3,6 @@ package com.botengine.osrs.script;
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.Bank;
 import com.botengine.osrs.api.Camera;
-import com.botengine.osrs.overlay.BotOverlay;
 import com.botengine.osrs.api.Combat;
 import com.botengine.osrs.api.GameObjects;
 import com.botengine.osrs.api.Interaction;
@@ -63,9 +62,8 @@ public class ScriptRunner
     private final Time time;
     private final Log botLog;
 
-    // ── Plugin config and overlay ─────────────────────────────────────────────
+    // ── Plugin config ─────────────────────────────────────────────────────────
     private final BotEngineConfig config;
-    private final BotOverlay botOverlay;
 
     // ── State ─────────────────────────────────────────────────────────────────
     // volatile: written on AWT thread (start/stop/pause), read on Client thread (onGameTick)
@@ -98,8 +96,7 @@ public class ScriptRunner
         Antiban antiban,
         Time time,
         Log botLog,
-        BotEngineConfig config,
-        BotOverlay botOverlay
+        BotEngineConfig config
     )
     {
         this.client = client;
@@ -117,7 +114,6 @@ public class ScriptRunner
         this.time = time;
         this.botLog = botLog;
         this.config = config;
-        this.botOverlay = botOverlay;
     }
 
     // ── GameTick handler ──────────────────────────────────────────────────────
@@ -195,7 +191,6 @@ public class ScriptRunner
         activeScript.onStart();
         antiban.reset();
         consecutiveErrors = 0;
-        botOverlay.resetStartTime();
         state = ScriptState.RUNNING;
     }
 
