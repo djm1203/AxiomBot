@@ -3,6 +3,7 @@ package com.botengine.osrs.scripts.woodcutting;
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.util.Progression;
 import net.runelite.api.GameObject;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.coords.WorldPoint;
@@ -52,6 +53,7 @@ public class WoodcuttingScript extends BotScript
     private boolean pickupNests     = true;
     private boolean hopOnCompetition = false;
     private WorldPoint homeTile;
+    private Progression progression = new Progression("", "");
 
     @Inject
     public WoodcuttingScript() {}
@@ -66,6 +68,7 @@ public class WoodcuttingScript extends BotScript
         bankingMode      = config.woodcuttingBankingMode();
         pickupNests      = config.woodcuttingPickupNests();
         hopOnCompetition = config.woodcuttingHopOnCompetition();
+        progression = new Progression(config.woodcuttingProgression(), treeNameFilter);
     }
 
     @Override
@@ -80,6 +83,13 @@ public class WoodcuttingScript extends BotScript
     @Override
     public void onLoop()
     {
+        // Resolve progression: update tree filter based on current level
+        if (!progression.isEmpty())
+        {
+            int lvl = client.getRealSkillLevel(net.runelite.api.Skill.WOODCUTTING);
+            treeNameFilter = progression.resolve(lvl);
+        }
+
         switch (state)
         {
             case FIND_TREE:  findAndChopTree();     break;

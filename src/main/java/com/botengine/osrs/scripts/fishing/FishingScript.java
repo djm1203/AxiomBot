@@ -2,6 +2,7 @@ package com.botengine.osrs.scripts.fishing;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.util.Progression;
 import net.runelite.api.NPC;
 import net.runelite.api.coords.WorldPoint;
 
@@ -44,6 +45,7 @@ public class FishingScript extends BotScript
     private boolean bankingMode   = false;
     private boolean shiftDrop     = false;
     private WorldPoint homeTile;
+    private Progression progression = new Progression("", "");
 
     @Inject
     public FishingScript() {}
@@ -58,6 +60,7 @@ public class FishingScript extends BotScript
         fishingAction = action.isEmpty() ? "Lure" : action;
         bankingMode   = config.fishingBankingMode();
         shiftDrop     = config.fishingShiftDrop();
+        progression = new Progression(config.fishingProgression(), fishingAction);
     }
 
     @Override
@@ -71,6 +74,12 @@ public class FishingScript extends BotScript
     @Override
     public void onLoop()
     {
+        if (!progression.isEmpty())
+        {
+            int lvl = client.getRealSkillLevel(net.runelite.api.Skill.FISHING);
+            fishingAction = progression.resolve(lvl);
+        }
+
         switch (state)
         {
             case FIND_SPOT: findAndFishSpot();    break;

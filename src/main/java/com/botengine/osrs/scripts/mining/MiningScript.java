@@ -2,6 +2,7 @@ package com.botengine.osrs.scripts.mining;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.util.Progression;
 import net.runelite.api.GameObject;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.coords.WorldPoint;
@@ -50,6 +51,7 @@ public class MiningScript extends BotScript
     private boolean shiftDrop         = false;
     private boolean hopOnCompetition  = false;
     private WorldPoint homeTile;
+    private Progression progression = new Progression("", "");
 
     @Inject
     public MiningScript() {}
@@ -64,6 +66,7 @@ public class MiningScript extends BotScript
         bankingMode      = config.miningBankingMode();
         shiftDrop        = config.miningShiftDrop();
         hopOnCompetition = config.miningHopOnCompetition();
+        progression = new Progression(config.miningProgression(), rockNameFilter);
     }
 
     @Override
@@ -78,6 +81,12 @@ public class MiningScript extends BotScript
     @Override
     public void onLoop()
     {
+        if (!progression.isEmpty())
+        {
+            int lvl = client.getRealSkillLevel(net.runelite.api.Skill.MINING);
+            rockNameFilter = progression.resolve(lvl);
+        }
+
         switch (state)
         {
             case FIND_ROCK: findAndMineRock();   break;

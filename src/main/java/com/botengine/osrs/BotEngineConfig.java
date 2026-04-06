@@ -227,6 +227,15 @@ public interface BotEngineConfig extends Config
     )
     default boolean woodcuttingHopOnCompetition() { return false; }
 
+    @ConfigItem(
+        keyName = "woodcuttingProgression",
+        name = "Progression (level:tree,...)",
+        description = "Level-based tree progression. Format: '1:Oak,30:Willow,45:Maple,60:Yew'. Leave blank to use tree name filter only.",
+        section = woodcuttingSection,
+        position = 4
+    )
+    default String woodcuttingProgression() { return ""; }
+
     // ── Mining section ────────────────────────────────────────────────────────
 
     @ConfigSection(
@@ -272,6 +281,15 @@ public interface BotEngineConfig extends Config
     )
     default boolean miningHopOnCompetition() { return false; }
 
+    @ConfigItem(
+        keyName = "miningProgression",
+        name = "Progression (level:ore,...)",
+        description = "Level-based ore progression. Format: '1:Copper,15:Iron,30:Coal,50:Mithril'. Leave blank to use rock name filter only.",
+        section = miningSection,
+        position = 4
+    )
+    default String miningProgression() { return ""; }
+
     // ── Fishing section ───────────────────────────────────────────────────────
 
     @ConfigSection(
@@ -307,6 +325,15 @@ public interface BotEngineConfig extends Config
         position = 2
     )
     default boolean fishingShiftDrop() { return false; }
+
+    @ConfigItem(
+        keyName = "fishingProgression",
+        name = "Progression (level:action,...)",
+        description = "Level-based fishing progression. Format: '1:Net,20:Fly,40:Harpoon'. Leave blank to use click action only.",
+        section = fishingSection,
+        position = 3
+    )
+    default String fishingProgression() { return ""; }
 
     // ── Alchemy section ───────────────────────────────────────────────────────
 
