@@ -3,12 +3,17 @@ package com.botengine.osrs.api;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
+import net.runelite.api.InventoryID;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.MenuAction;
 import net.runelite.api.NPC;
+import net.runelite.api.ObjectComposition;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 
 import javax.inject.Inject;
+import java.util.Arrays;
 
 /**
  * High-level API for interacting with the OSRS bank interface.
@@ -37,14 +42,21 @@ public class Bank
     /** Child index of the "Deposit inventory" button within group 12. */
     private static final int DEPOSIT_ALL_CHILD_ID = 42;
 
+    /** Bank items container child within group 12. */
+    private static final int ITEMS_CHILD_ID = 13;
+
     private final Client client;
     private final Interaction interaction;
+    private final GameObjects gameObjects;
+    private final Npcs npcs;
 
     @Inject
-    public Bank(Client client, Interaction interaction)
+    public Bank(Client client, Interaction interaction, GameObjects gameObjects, Npcs npcs)
     {
         this.client = client;
         this.interaction = interaction;
+        this.gameObjects = gameObjects;
+        this.npcs = npcs;
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -144,32 +156,141 @@ public class Bank
 
     /**
      * Withdraws the specified quantity of an item from the bank.
+     * Traverses bank item widgets (group 12, child 13) to find the item slot,
+     * then fires the appropriate CC_OP action.
      *
-     * <p>TODO: Full implementation requires traversing the bank item widgets
-     * (group 12, items container child) to find the slot that contains
-     * {@code itemId}, then invoking the appropriate withdraw-N menu action on
-     * that slot. The correct {@link MenuAction} variant depends on whether the
-     * bank is in "withdraw as note" mode and which quantity option is selected
-     * (1, 5, 10, X, All). This is left for a future implementation.
+     * Quantity mapping:
+     *   1   → op 1
+     *   5   → op 2
+     *   10  → op 3
+     *   All → op 7
+     *   X   → not supported (requires dialog interaction)
      *
      * @param itemId   the item ID to withdraw
-     * @param quantity the number of items to withdraw (1, 5, 10, or a custom amount)
+     * @param quantity the number of items (1, 5, 10, or Integer.MAX_VALUE for All)
      */
     public void withdraw(int itemId, int quantity)
     {
-        // TODO: Implement full widget traversal.
-        //   1. Locate the bank items container widget (group 12, items child).
-        //   2. Iterate its dynamic children to find the slot whose item ID
-        //      matches itemId.
-        //   3. Determine the MenuAction based on quantity:
-        //        1  -> CC_OP (op 1)
-        //        5  -> CC_OP (op 2)
-        //        10 -> CC_OP (op 3)
-        //        X  -> CC_OP_LOW_PRIORITY with an amount dialog
-        //        All -> CC_OP (op 5 or 7 depending on note mode)
-        //   4. Call client.invokeMenuAction with the resolved slot index and
-        //      the widget's packed ID.
-        log.warn("withdraw(itemId={}, quantity={}) is not yet implemented", itemId, quantity);
+        Widget itemsContainer = client.getWidget(BANK_GROUP_ID, ITEMS_CHILD_ID);
+        if (itemsContainer == null)
+        {
+            log.warn("withdraw: bank items container not found");
+            return;
+        }
+
+        Widget[] children = itemsContainer.getDynamicChildren();
+        if (children == null) return;
+
+        for (int slot = 0; slot < children.length; slot++)
+        {
+            Widget child = children[slot];
+            if (child == null || child.getItemId() != itemId) continue;
+
+            int op = quantityToOp(quantity);
+            log.debug("Withdrawing item id={} qty={} slot={} op={}", itemId, quantity, slot, op);
+            client.menuAction(
+                slot, itemsContainer.getId(),
+                MenuAction.CC_OP,
+                op, itemId,
+                "", ""
+            );
+            return;
+        }
+        log.warn("withdraw: item id={} not found in bank", itemId);
+    }
+
+    /**
+     * Withdraws all copies of an item from the bank.
+     */
+    public void withdrawAll(int itemId)
+    {
+        withdraw(itemId, Integer.MAX_VALUE);
+    }
+
+    // ── Bank finding ─────────────────────────────────────────────────────────
+
+    /**
+     * Returns the nearest bank booth or chest GameObject in the scene, or null.
+     * Detects by checking if the object's definition includes a "Bank" action.
+     * Works at any bank without needing hardcoded IDs.
+     */
+    public GameObject findNearestBankObject()
+    {
+        return gameObjects.nearest(obj -> {
+            ObjectComposition def = client.getObjectDefinition(obj.getId());
+            if (def == null) return false;
+            String[] actions = def.getActions();
+            if (actions == null) return false;
+            for (String action : actions)
+            {
+                if ("Bank".equals(action)) return true;
+            }
+            return false;
+        });
+    }
+
+    /**
+     * Returns the nearest Banker NPC in the scene, or null.
+     */
+    public NPC findNearestBanker()
+    {
+        return npcs.nearest(npc -> {
+            String name = npc.getName();
+            return name != null && (name.equals("Banker") || name.contains("Banker"));
+        });
+    }
+
+    /**
+     * Returns true if a bank object or banker NPC is within 10 tiles.
+     */
+    public boolean isNearBank()
+    {
+        GameObject obj = findNearestBankObject();
+        if (obj != null && obj.getWorldLocation().distanceTo(
+            client.getLocalPlayer().getWorldLocation()) <= 10) return true;
+
+        NPC banker = findNearestBanker();
+        return banker != null && banker.getWorldLocation().distanceTo(
+            client.getLocalPlayer().getWorldLocation()) <= 10;
+    }
+
+    /**
+     * Opens the nearest bank (booth, chest, or banker NPC) if one is nearby.
+     * Returns true if an open attempt was made, false if nothing nearby.
+     */
+    public boolean openNearest()
+    {
+        GameObject obj = findNearestBankObject();
+        if (obj != null)
+        {
+            open(obj);
+            return true;
+        }
+        NPC banker = findNearestBanker();
+        if (banker != null)
+        {
+            open(banker);
+            return true;
+        }
+        return false;
+    }
+
+    // ── Bank item queries ────────────────────────────────────────────────────
+
+    /**
+     * Returns true if the bank contains the given item (bank must be open).
+     */
+    public boolean contains(int itemId)
+    {
+        Widget itemsContainer = client.getWidget(BANK_GROUP_ID, ITEMS_CHILD_ID);
+        if (itemsContainer == null) return false;
+        Widget[] children = itemsContainer.getDynamicChildren();
+        if (children == null) return false;
+        for (Widget child : children)
+        {
+            if (child != null && child.getItemId() == itemId) return true;
+        }
+        return false;
     }
 
     // ── Closing ───────────────────────────────────────────────────────────────
@@ -191,5 +312,15 @@ public class Bank
         }
         log.debug("Closing bank via close button");
         interaction.click(closeBtn);
+    }
+
+    // ── Internal ─────────────────────────────────────────────────────────────
+
+    private static int quantityToOp(int quantity)
+    {
+        if (quantity == 1)               return 1;
+        if (quantity == 5)               return 2;
+        if (quantity == 10)              return 3;
+        return 7; // "Withdraw-All"
     }
 }

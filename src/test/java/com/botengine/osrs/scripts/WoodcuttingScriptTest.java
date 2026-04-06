@@ -4,6 +4,8 @@ import com.botengine.osrs.api.*;
 import com.botengine.osrs.script.BotScript;
 import com.botengine.osrs.scripts.woodcutting.WoodcuttingScript;
 import com.botengine.osrs.util.Antiban;
+import com.botengine.osrs.api.Prayers;
+import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
 import net.runelite.api.Client;
@@ -47,6 +49,8 @@ class WoodcuttingScriptTest
     @Mock private Magic magic;
     @Mock private Combat combat;
     @Mock private Camera camera;
+    @Mock private Prayers prayers;
+    @Mock private GroundItems groundItems;
     @Mock private Antiban antiban;
     @Mock private Time time;
     @Mock private Log log;
@@ -59,7 +63,7 @@ class WoodcuttingScriptTest
     {
         script = new WoodcuttingScript();
         script.inject(client, players, npcs, gameObjects, inventory,
-            bank, movement, interaction, magic, combat, camera, antiban, time, log);
+            bank, movement, interaction, magic, combat, camera, prayers, groundItems, antiban, time, log);
         script.onStart();
     }
 

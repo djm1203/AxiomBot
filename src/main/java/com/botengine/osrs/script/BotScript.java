@@ -5,12 +5,14 @@ import com.botengine.osrs.api.Bank;
 import com.botengine.osrs.api.Camera;
 import com.botengine.osrs.api.Combat;
 import com.botengine.osrs.api.GameObjects;
+import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.api.Interaction;
 import com.botengine.osrs.api.Inventory;
 import com.botengine.osrs.api.Magic;
 import com.botengine.osrs.api.Movement;
 import com.botengine.osrs.api.Npcs;
 import com.botengine.osrs.api.Players;
+import com.botengine.osrs.api.Prayers;
 import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
@@ -67,6 +69,8 @@ public abstract class BotScript
     protected Magic magic;
     protected Combat combat;
     protected Camera camera;
+    protected Prayers prayers;
+    protected GroundItems groundItems;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     protected Antiban antiban;
@@ -89,6 +93,8 @@ public abstract class BotScript
         Magic magic,
         Combat combat,
         Camera camera,
+        Prayers prayers,
+        GroundItems groundItems,
         Antiban antiban,
         Time time,
         Log log
@@ -105,6 +111,8 @@ public abstract class BotScript
         this.magic = magic;
         this.combat = combat;
         this.camera = camera;
+        this.prayers = prayers;
+        this.groundItems = groundItems;
         this.antiban = antiban;
         this.time = time;
         this.log = log;

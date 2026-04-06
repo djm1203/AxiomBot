@@ -1,7 +1,9 @@
 package com.botengine.osrs.scripts.cooking;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
 import net.runelite.api.GameObject;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
 
 import javax.inject.Inject;
@@ -10,46 +12,34 @@ import javax.inject.Inject;
  * Cooking AFK script.
  *
  * State machine:
- *   FIND_FIRE → COOKING → WAIT_DIALOGUE → COOKING_IN_PROGRESS → (inventory empty) → DONE
+ *   FIND_FIRE → USE_FOOD → WAIT_DIALOGUE → COOKING → (done) → BANKING or DONE
  *
- * Cooks all raw fish/food in inventory on a fire or range.
- * Uses the Make-All production dialogue to cook the entire inventory at once.
- * Does not bank — intended for use after a fishing run or with pre-stocked inventory.
- *
- * Supported raw food item IDs:
- *   317 — Raw shrimps       321 — Raw anchovies
- *   327 — Raw sardine       335 — Raw herring
- *   339 — Raw pike          349 — Raw salmon
- *   351 — Raw trout         359 — Raw tuna
- *   371 — Raw swordfish     377 — Raw lobster
- *   383 — Raw shark
- *
- * Fire/Range GameObjects:
- *   Fires:    26185, 26186 (player-made fires)
- *   Ranges:   114 (Lumbridge), 9682 (various)
+ * Features:
+ *   - Banking loop to restock raw food
+ *   - Make-All dialogue handling
+ *   - Fire/range detection
  */
 public class CookingScript extends BotScript
 {
-    // Raw food item IDs to cook
     private static final int[] RAW_FOOD_IDS = {
-        317, 321, 327, 335, 339,  // Shrimps, Anchovies, Sardine, Herring, Pike
-        349, 351, 359, 371, 377, 383  // Salmon, Trout, Tuna, Swordfish, Lobster, Shark
+        317, 321, 327, 335, 339, 349, 351, 359, 371, 377, 383
     };
 
-    // Fire / Range game object IDs
     private static final int[] FIRE_RANGE_IDS = {
-        26185, 26186,   // Player fires
-        114, 2728, 2729, 9682,  // Various ranges/fireplaces
-        12269           // Lumbridge range (no-burn at high level)
+        26185, 26186,
+        114, 2728, 2729, 9682,
+        12269
     };
 
-    // Cooking interface widget (interface 270 = Make-X, component 14 = Make All)
-    private static final int MAKE_ALL_WIDGET = net.runelite.api.widgets.WidgetUtil.packComponentId(270, 14);
+    private static final int MAKE_ALL_WIDGET =
+        net.runelite.api.widgets.WidgetUtil.packComponentId(270, 14);
 
-    private enum State { FIND_FIRE, COOKING, WAIT_DIALOGUE, COOKING_IN_PROGRESS, DONE }
+    private enum State { FIND_FIRE, USE_FOOD, WAIT_DIALOGUE, COOKING, BANKING, DONE }
 
     private State state = State.FIND_FIRE;
-    private int ticksWaited = 0;
+    private int   ticksWaited = 0;
+    private boolean bankingMode = false;
+    private WorldPoint homeTile;
 
     @Inject
     public CookingScript() {}
@@ -58,10 +48,17 @@ public class CookingScript extends BotScript
     public String getName() { return "Cooking"; }
 
     @Override
+    public void configure(BotEngineConfig config)
+    {
+        bankingMode = config.productionBankingMode();
+    }
+
+    @Override
     public void onStart()
     {
-        log.info("Started — cooking all raw food in inventory");
-        state = State.FIND_FIRE;
+        log.info("Started — banking={}", bankingMode);
+        state    = State.FIND_FIRE;
+        homeTile = players.getLocation();
     }
 
     @Override
@@ -69,128 +66,108 @@ public class CookingScript extends BotScript
     {
         switch (state)
         {
-            case FIND_FIRE:
-                findFireAndUseFood();
-                break;
-
-            case COOKING:
-                useFoodOnFire();
-                break;
-
-            case WAIT_DIALOGUE:
-                waitForCookDialogue();
-                break;
-
-            case COOKING_IN_PROGRESS:
-                checkCookingProgress();
-                break;
-
-            case DONE:
-                log.info("All food cooked — done");
-                break;
+            case FIND_FIRE:      findFire();          break;
+            case USE_FOOD:       useFoodOnFire();     break;
+            case WAIT_DIALOGUE:  waitForDialogue();   break;
+            case COOKING:        checkProgress();     break;
+            case BANKING:        handleBanking();     break;
+            case DONE:           log.info("Done");    break;
         }
     }
 
     @Override
-    public void onStop()
-    {
-        log.info("Stopped");
-    }
+    public void onStop() { log.info("Stopped"); }
 
     // ── State handlers ────────────────────────────────────────────────────────
 
-    private void findFireAndUseFood()
+    private void findFire()
     {
         int rawFood = findRawFood();
         if (rawFood == -1)
         {
-            log.info("No raw food in inventory — done");
+            if (bankingMode) { state = State.BANKING; return; }
             state = State.DONE;
             return;
         }
 
         GameObject fire = gameObjects.nearest(FIRE_RANGE_IDS);
-        if (fire == null)
-        {
-            log.debug("No fire/range nearby — waiting");
-            return;
-        }
+        if (fire == null) { log.debug("No fire/range nearby — waiting"); return; }
 
-        state = State.COOKING;
+        state = State.USE_FOOD;
     }
 
     private void useFoodOnFire()
     {
         int rawFoodId = findRawFood();
-        if (rawFoodId == -1)
-        {
-            state = State.DONE;
-            return;
-        }
+        if (rawFoodId == -1) { state = bankingMode ? State.BANKING : State.DONE; return; }
 
         GameObject fire = gameObjects.nearest(FIRE_RANGE_IDS);
-        if (fire == null)
-        {
-            state = State.FIND_FIRE;
-            return;
-        }
+        if (fire == null) { state = State.FIND_FIRE; return; }
 
         int foodSlot = inventory.getSlot(rawFoodId);
         if (foodSlot == -1) return;
 
-        // Use raw food item on fire/range to open cooking dialogue
         interaction.useItemOn(rawFoodId, foodSlot, fire);
         antiban.reactionDelay();
         state = State.WAIT_DIALOGUE;
         ticksWaited = 0;
-        log.debug("Used raw food id={} on fire id={}", rawFoodId, fire.getId());
     }
 
-    private void waitForCookDialogue()
+    private void waitForDialogue()
     {
         ticksWaited++;
-
-        // Check for Make-All button (interface 270)
         Widget makeAll = client.getWidget(270, 14);
         if (makeAll != null && !makeAll.isHidden())
         {
             interaction.clickWidget(MAKE_ALL_WIDGET);
             antiban.reactionDelay();
-            state = State.COOKING_IN_PROGRESS;
-            log.debug("Clicked Make All on cooking dialogue");
+            state = State.COOKING;
             return;
         }
-
-        if (ticksWaited > 5)
-        {
-            log.debug("Cooking dialogue timeout — retrying");
-            state = State.COOKING;
-        }
+        if (ticksWaited > 5) state = State.USE_FOOD;
     }
 
-    private void checkCookingProgress()
+    private void checkProgress()
     {
-        int rawFood = findRawFood();
-        if (rawFood == -1)
+        if (findRawFood() == -1)
         {
-            state = State.DONE;
+            state = bankingMode ? State.BANKING : State.DONE;
+            return;
+        }
+        if (players.isIdle()) { antiban.randomDelay(300, 700); state = State.USE_FOOD; }
+    }
+
+    private void handleBanking()
+    {
+        if (bank.isOpen())
+        {
+            bank.depositAll();
+            antiban.reactionDelay();
+            // Withdraw raw food (try each type)
+            for (int id : RAW_FOOD_IDS)
+            {
+                if (bank.contains(id))
+                {
+                    bank.withdraw(id, Integer.MAX_VALUE);
+                    antiban.reactionDelay();
+                    break;
+                }
+            }
+            bank.close();
+            if (homeTile != null && movement.distanceTo(homeTile) > 5)
+                movement.walkTo(homeTile);
+            else
+                state = State.FIND_FIRE;
             return;
         }
 
-        // If player stopped animating but still has raw food, dialogue closed early
-        if (players.isIdle())
-        {
-            antiban.randomDelay(300, 700);
-            state = State.COOKING;
-        }
+        if (bank.isNearBank()) bank.openNearest();
+        else { movement.setRunning(true); log.debug("Looking for bank..."); }
     }
 
     private int findRawFood()
     {
-        for (int id : RAW_FOOD_IDS)
-        {
-            if (inventory.contains(id)) return id;
-        }
+        for (int id : RAW_FOOD_IDS) { if (inventory.contains(id)) return id; }
         return -1;
     }
 }

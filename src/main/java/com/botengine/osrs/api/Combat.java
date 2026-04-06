@@ -4,6 +4,7 @@ import net.runelite.api.Client;
 import net.runelite.api.MenuAction;
 import net.runelite.api.NPC;
 import net.runelite.api.Skill;
+import net.runelite.api.VarPlayer;
 import net.runelite.api.widgets.WidgetInfo;
 
 import javax.inject.Inject;
@@ -123,5 +124,47 @@ public class Combat
     public int getPrayerPoints()
     {
         return client.getBoostedSkillLevel(Skill.PRAYER);
+    }
+
+    // ── Special attack ────────────────────────────────────────────────────────
+
+    /**
+     * Returns the current special attack energy as a percentage (0–100).
+     * Reads VarPlayer 300, which stores energy * 10 (1000 = 100%).
+     */
+    public int getSpecPercent()
+    {
+        return client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10;
+    }
+
+    /**
+     * Returns true if special attack energy is at or above the given threshold.
+     */
+    public boolean canSpec(int thresholdPercent)
+    {
+        return getSpecPercent() >= thresholdPercent;
+    }
+
+    /**
+     * Activates the special attack by clicking the spec orb widget.
+     * The player must then attack for the spec to fire.
+     */
+    public void activateSpec()
+    {
+        client.menuAction(
+            -1, WidgetInfo.MINIMAP_SPEC_ORB.getId(),
+            MenuAction.CC_OP,
+            1, -1,
+            "Use", ""
+        );
+    }
+
+    /**
+     * Returns true if the special attack is currently activated (ready to fire).
+     * Reads VarPlayer 301 (SPECIAL_ATTACK_ENABLED): 1 = enabled, 0 = disabled.
+     */
+    public boolean isSpecActive()
+    {
+        return client.getVarpValue(VarPlayer.SPECIAL_ATTACK_ENABLED) == 1;
     }
 }

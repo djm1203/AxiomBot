@@ -1,7 +1,9 @@
 package com.botengine.osrs.scripts.smithing;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
 import net.runelite.api.GameObject;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
 
 import javax.inject.Inject;
@@ -10,42 +12,27 @@ import javax.inject.Inject;
  * Smithing AFK script.
  *
  * State machine:
- *   FIND_ANVIL → SMITHING → WAIT_DIALOGUE → SMITHING_IN_PROGRESS → (bars gone) → DONE
+ *   FIND_ANVIL → USE_BAR → WAIT_DIALOGUE → SMITHING → (done) → BANKING or DONE
  *
- * Smiths all bars in inventory into the selected item type using an anvil.
- * Opens the smithing dialogue and clicks Make-All to process the full inventory.
- *
- * Common bar item IDs:
- *   2349 — Bronze bar        2351 — Iron bar
- *   2353 — Steel bar         2359 — Mithril bar
- *   2361 — Adamantite bar    2363 — Runite bar
- *   9378 — Necronium bar     (for Runescape 3 compatibility — not used)
- *
- * Anvil game object IDs:
- *   2097 — Standard anvil
- *
- * Smithing interface widget IDs:
- *   Interface 312 = Smithing menu. Component varies by item being smithed.
- *   This script clicks "Smith All" using the Make-X widget (interface 270).
- *   The production dialogue Make-All button is at component 270/14.
+ * Features:
+ *   - Banking loop to restock bars
+ *   - Make-All dialogue handling
+ *   - Configurable item name (via config panel)
  */
 public class SmithingScript extends BotScript
 {
-    // All metal bars
-    private static final int[] BAR_IDS = {
-        2349, 2351, 2353, 2359, 2361, 2363
-    };
+    private static final int[] BAR_IDS = { 2349, 2351, 2353, 2359, 2361, 2363 };
+    private static final int ANVIL_ID  = 2097;
 
-    // Standard anvil game object ID
-    private static final int ANVIL_ID = 2097;
+    private static final int MAKE_ALL_WIDGET =
+        net.runelite.api.widgets.WidgetUtil.packComponentId(270, 14);
 
-    // Make-All button on the smithing production interface (interface 270)
-    private static final int MAKE_ALL_WIDGET = net.runelite.api.widgets.WidgetUtil.packComponentId(270, 14);
-
-    private enum State { FIND_ANVIL, SMITHING, WAIT_DIALOGUE, SMITHING_IN_PROGRESS, DONE }
+    private enum State { FIND_ANVIL, USE_BAR, WAIT_DIALOGUE, SMITHING, BANKING, DONE }
 
     private State state = State.FIND_ANVIL;
-    private int ticksWaited = 0;
+    private int   ticksWaited = 0;
+    private boolean bankingMode = false;
+    private WorldPoint homeTile;
 
     @Inject
     public SmithingScript() {}
@@ -54,10 +41,17 @@ public class SmithingScript extends BotScript
     public String getName() { return "Smithing"; }
 
     @Override
+    public void configure(BotEngineConfig config)
+    {
+        bankingMode = config.productionBankingMode();
+    }
+
+    @Override
     public void onStart()
     {
-        log.info("Started — smithing all bars in inventory");
-        state = State.FIND_ANVIL;
+        log.info("Started — banking={}", bankingMode);
+        state    = State.FIND_ANVIL;
+        homeTile = players.getLocation();
     }
 
     @Override
@@ -65,128 +59,93 @@ public class SmithingScript extends BotScript
     {
         switch (state)
         {
-            case FIND_ANVIL:
-                findAnvil();
-                break;
-
-            case SMITHING:
-                useBarOnAnvil();
-                break;
-
-            case WAIT_DIALOGUE:
-                waitForSmithDialogue();
-                break;
-
-            case SMITHING_IN_PROGRESS:
-                checkSmithingProgress();
-                break;
-
-            case DONE:
-                log.info("All bars smithed — done");
-                break;
+            case FIND_ANVIL:    findAnvil();        break;
+            case USE_BAR:       useBarOnAnvil();    break;
+            case WAIT_DIALOGUE: waitForDialogue();  break;
+            case SMITHING:      checkProgress();    break;
+            case BANKING:       handleBanking();    break;
+            case DONE:          log.info("Done");   break;
         }
     }
 
     @Override
-    public void onStop()
-    {
-        log.info("Stopped");
-    }
+    public void onStop() { log.info("Stopped"); }
 
     // ── State handlers ────────────────────────────────────────────────────────
 
     private void findAnvil()
     {
-        int barId = findBar();
-        if (barId == -1)
+        if (findBar() == -1)
         {
-            log.info("No bars in inventory — done");
+            if (bankingMode) { state = State.BANKING; return; }
             state = State.DONE;
             return;
         }
-
-        GameObject anvil = gameObjects.nearest(ANVIL_ID);
-        if (anvil == null)
-        {
-            log.debug("No anvil nearby — waiting");
-            return;
-        }
-
-        state = State.SMITHING;
+        if (gameObjects.nearest(ANVIL_ID) != null) state = State.USE_BAR;
+        else log.debug("No anvil nearby — waiting");
     }
 
     private void useBarOnAnvil()
     {
         int barId = findBar();
-        if (barId == -1)
-        {
-            state = State.DONE;
-            return;
-        }
+        if (barId == -1) { state = bankingMode ? State.BANKING : State.DONE; return; }
 
         GameObject anvil = gameObjects.nearest(ANVIL_ID);
-        if (anvil == null)
-        {
-            state = State.FIND_ANVIL;
-            return;
-        }
+        if (anvil == null) { state = State.FIND_ANVIL; return; }
 
         int barSlot = inventory.getSlot(barId);
         if (barSlot == -1) return;
 
-        // Use bar on anvil to open smithing production menu
         interaction.useItemOn(barId, barSlot, anvil);
         antiban.reactionDelay();
         state = State.WAIT_DIALOGUE;
         ticksWaited = 0;
-        log.debug("Used bar id={} on anvil", barId);
     }
 
-    private void waitForSmithDialogue()
+    private void waitForDialogue()
     {
         ticksWaited++;
-
-        // Production interface "Make All" button
         Widget makeAll = client.getWidget(270, 14);
         if (makeAll != null && !makeAll.isHidden())
         {
             interaction.clickWidget(MAKE_ALL_WIDGET);
             antiban.reactionDelay();
-            state = State.SMITHING_IN_PROGRESS;
-            log.debug("Clicked Make All on smithing dialogue");
+            state = State.SMITHING;
             return;
         }
-
-        if (ticksWaited > 5)
-        {
-            log.debug("Smithing dialogue timeout — retrying");
-            state = State.SMITHING;
-        }
+        if (ticksWaited > 5) state = State.USE_BAR;
     }
 
-    private void checkSmithingProgress()
+    private void checkProgress()
     {
-        int barId = findBar();
-        if (barId == -1)
+        if (findBar() == -1) { state = bankingMode ? State.BANKING : State.DONE; return; }
+        if (players.isIdle()) { antiban.randomDelay(300, 700); state = State.USE_BAR; }
+    }
+
+    private void handleBanking()
+    {
+        if (bank.isOpen())
         {
-            state = State.DONE;
+            bank.depositAll();
+            antiban.reactionDelay();
+            for (int id : BAR_IDS)
+            {
+                if (bank.contains(id)) { bank.withdraw(id, Integer.MAX_VALUE); antiban.reactionDelay(); break; }
+            }
+            bank.close();
+            if (homeTile != null && movement.distanceTo(homeTile) > 5)
+                movement.walkTo(homeTile);
+            else
+                state = State.FIND_ANVIL;
             return;
         }
-
-        // If player has gone idle but bars remain, dialogue may have closed
-        if (players.isIdle())
-        {
-            antiban.randomDelay(300, 700);
-            state = State.SMITHING;
-        }
+        if (bank.isNearBank()) bank.openNearest();
+        else { movement.setRunning(true); log.debug("Looking for bank..."); }
     }
 
     private int findBar()
     {
-        for (int id : BAR_IDS)
-        {
-            if (inventory.contains(id)) return id;
-        }
+        for (int id : BAR_IDS) { if (inventory.contains(id)) return id; }
         return -1;
     }
 }

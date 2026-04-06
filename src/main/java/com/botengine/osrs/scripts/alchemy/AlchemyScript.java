@@ -1,7 +1,7 @@
 package com.botengine.osrs.scripts.alchemy;
 
+import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
-import net.runelite.api.widgets.Widget;
 
 import javax.inject.Inject;
 
@@ -9,36 +9,31 @@ import javax.inject.Inject;
  * High Alchemy AFK script.
  *
  * State machine:
- *   CHECK_RUNES → ALCHING → (no items left) → STOPPED
+ *   CHECK → ALCHING → (no supplies) → BANKING (optional) → CHECK
  *
- * Alches every item in the inventory that is not a nature rune or fire rune/staff.
- * The script stops itself when the inventory contains no more alchable items.
- *
- * Requirements:
- *   - Nature runes in inventory
- *   - Fire runes OR fire/lava/steam/smoke staff equipped
- *   - Items to alch in inventory
- *
- * Configurable item ID is not implemented here — the script alches the first
- * non-rune item it finds. For targeted alching, extend this class and override
- * getAlchItemId() to return the specific item ID.
+ * Features:
+ *   - Configurable item ID (0 = auto-detect first non-rune item)
+ *   - Nature rune tracking — stops/banks when out
+ *   - Staff of Fire detection (skips fire rune check if equipped)
+ *   - Optional banking loop to restock
  */
 public class AlchemyScript extends BotScript
 {
-    // Rune item IDs — never alch these
-    private static final int NATURE_RUNE  = 561;
-    private static final int FIRE_RUNE    = 554;
-    private static final int AIR_RUNE     = 556;
-    private static final int WATER_RUNE   = 555;
-    private static final int EARTH_RUNE   = 557;
+    private static final int NATURE_RUNE = 561;
+    private static final int FIRE_RUNE   = 554;
+    private static final int AIR_RUNE    = 556;
+    private static final int WATER_RUNE  = 555;
+    private static final int EARTH_RUNE  = 557;
 
-    // Minimum cast interval (ms) — High Alch takes ~3 ticks (1800ms)
+    // Alch cast interval (High Alch = 3 ticks = ~1800ms)
     private static final int ALCH_INTERVAL_MS = 1800;
 
-    private enum State { CHECK_RUNES, ALCHING }
+    private enum State { CHECK, ALCHING, BANKING }
 
-    private State state = State.CHECK_RUNES;
-    private long lastAlchTime = 0;
+    private State state = State.CHECK;
+    private long  lastAlchTime = 0;
+    private int   configuredItemId = 0; // 0 = auto
+    private boolean bankingMode    = false;
 
     @Inject
     public AlchemyScript() {}
@@ -47,10 +42,17 @@ public class AlchemyScript extends BotScript
     public String getName() { return "High Alchemy"; }
 
     @Override
+    public void configure(BotEngineConfig config)
+    {
+        configuredItemId = config.alchemyItemId();
+        bankingMode      = config.alchemyBankingMode();
+    }
+
+    @Override
     public void onStart()
     {
-        log.info("Started — will alch all non-rune items");
-        state = State.CHECK_RUNES;
+        log.info("Started — itemId={} banking={}", configuredItemId == 0 ? "auto" : configuredItemId, bankingMode);
+        state = State.CHECK;
     }
 
     @Override
@@ -58,36 +60,45 @@ public class AlchemyScript extends BotScript
     {
         switch (state)
         {
-            case CHECK_RUNES:
-                checkRunes();
-                break;
-
-            case ALCHING:
-                doAlch();
-                break;
+            case CHECK:   checkSupplies(); break;
+            case ALCHING: doAlch();        break;
+            case BANKING: handleBanking(); break;
         }
     }
 
     @Override
-    public void onStop()
-    {
-        log.info("Stopped");
-    }
+    public void onStop() { log.info("Stopped"); }
 
     // ── State handlers ────────────────────────────────────────────────────────
 
-    private void checkRunes()
+    private void checkSupplies()
     {
         if (!magic.canAlch())
         {
-            log.warn("Missing runes or fire source — stopping");
-            return; // ScriptRunner will keep calling; user must fix inventory
+            if (bankingMode)
+            {
+                log.info("Missing runes — banking to restock");
+                state = State.BANKING;
+            }
+            else
+            {
+                log.warn("Missing nature runes or fire source — waiting");
+            }
+            return;
         }
 
         int itemId = findAlchItem();
         if (itemId == -1)
         {
-            log.info("No alchable items remaining — done");
+            if (bankingMode)
+            {
+                log.info("No alchable items — banking to restock");
+                state = State.BANKING;
+            }
+            else
+            {
+                log.info("No alchable items remaining — done");
+            }
             return;
         }
 
@@ -96,18 +107,19 @@ public class AlchemyScript extends BotScript
 
     private void doAlch()
     {
-        // Respect the 3-tick alch cooldown
         long now = System.currentTimeMillis();
-        if (now - lastAlchTime < ALCH_INTERVAL_MS)
-        {
-            return;
-        }
+        if (now - lastAlchTime < ALCH_INTERVAL_MS) return;
 
         int itemId = findAlchItem();
         if (itemId == -1)
         {
-            log.info("No alchable items remaining — done");
-            state = State.CHECK_RUNES;
+            state = State.CHECK;
+            return;
+        }
+
+        if (!magic.canAlch())
+        {
+            state = State.CHECK;
             return;
         }
 
@@ -120,18 +132,54 @@ public class AlchemyScript extends BotScript
         log.debug("Alched item id={} slot={}", itemId, slot);
     }
 
-    /**
-     * Returns the first inventory item that is safe to alch.
-     * Skips runes, noted items (id > 0 and noted), and empty slots.
-     */
+    private void handleBanking()
+    {
+        if (bank.isOpen())
+        {
+            // Deposit everything except runes
+            bank.depositAll();
+            antiban.reactionDelay();
+            // Withdraw nature runes (stack of 1000)
+            if (bank.contains(NATURE_RUNE))
+            {
+                bank.withdraw(NATURE_RUNE, Integer.MAX_VALUE);
+                antiban.reactionDelay();
+            }
+            // If specific item configured, withdraw it
+            if (configuredItemId > 0 && bank.contains(configuredItemId))
+            {
+                bank.withdraw(configuredItemId, Integer.MAX_VALUE);
+                antiban.reactionDelay();
+            }
+            bank.close();
+            state = State.CHECK;
+            return;
+        }
+
+        if (bank.isNearBank())
+        {
+            bank.openNearest();
+        }
+        else
+        {
+            log.debug("Looking for bank...");
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
     private int findAlchItem()
     {
+        if (configuredItemId > 0)
+        {
+            return inventory.contains(configuredItemId) ? configuredItemId : -1;
+        }
+        // Auto-detect: first non-rune item
         for (net.runelite.api.Item item : inventory.getItems())
         {
             if (item == null) continue;
             int id = item.getId();
-            if (id <= 0) continue;
-            if (isRune(id)) continue;
+            if (id <= 0 || isRune(id)) continue;
             return id;
         }
         return -1;
@@ -139,10 +187,8 @@ public class AlchemyScript extends BotScript
 
     private boolean isRune(int id)
     {
-        return id == NATURE_RUNE
-            || id == FIRE_RUNE
-            || id == AIR_RUNE
-            || id == WATER_RUNE
+        return id == NATURE_RUNE || id == FIRE_RUNE
+            || id == AIR_RUNE   || id == WATER_RUNE
             || id == EARTH_RUNE;
     }
 }

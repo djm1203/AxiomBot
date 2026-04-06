@@ -1,57 +1,69 @@
 package com.botengine.osrs.scripts.combat;
 
 import com.botengine.osrs.BotEngineConfig;
+import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.script.BotScript;
 import net.runelite.api.NPC;
+import net.runelite.api.Prayer;
+import net.runelite.api.coords.WorldPoint;
 
 import javax.inject.Inject;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Combat AFK script.
  *
  * State machine:
  *   FIND_TARGET → ATTACKING → (low HP) → EATING → ATTACKING
- *                           → (target dead) → FIND_TARGET
+ *                           → (target dead + loot) → LOOTING → FIND_TARGET
+ *                           → (banking mode + no food) → BANKING → FIND_TARGET
  *
- * Targets the nearest NPC matching a configurable set of IDs.
- * Eats food when HP drops below a configurable threshold.
- * Designed for Sand Crabs, Crabs, Slayer, or any aggressive mob.
- *
- * Default target IDs (Sand Crabs — common AFK training spot):
- *   1266 — Sand Crab (active)
- *   1267 — Sand Crab (dormant — need to walk away and return to wake)
- *
- * Default food: Shark (385) or any cooked food in inventory.
- * Default eat threshold: 50% HP.
+ * Features:
+ *   - Configurable target NPC name
+ *   - Food eating at configurable HP threshold
+ *   - Prayer activation (protective + offensive) with auto prayer pot drinking
+ *   - Ground item loot pickup after kills (configurable item ID whitelist)
+ *   - Special attack at configurable spec threshold
+ *   - Banking mode — walks to nearest bank when out of food
+ *   - Camera rotation for off-screen targets
  */
 public class CombatScript extends BotScript
 {
-    // Food item IDs checked in order — first match is eaten
+    // Food item IDs checked in priority order
     private static final int[] FOOD_IDS = {
         385,  // Shark
         361,  // Tuna
         373,  // Swordfish
         379,  // Lobster
-        329,  // Sardine (low-level)
+        329,  // Sardine
         319,  // Shrimps
         2142  // Cooked karambwan
     };
 
-    // Idle ticks before re-searching for a target after combat ends
     private static final int IDLE_TIMEOUT_TICKS = 4;
+    private static final int MAX_CAMERA_RETRIES  = 5;
 
-    // Max ticks to spend rotating the camera before giving up on an off-screen target
-    private static final int MAX_CAMERA_RETRIES = 5;
+    private enum State { FIND_TARGET, ATTACKING, EATING, LOOTING, BANKING }
 
-    private enum State { FIND_TARGET, ATTACKING, EATING }
+    // ── Config values (set in configure()) ───────────────────────────────────
+    private String  targetNpcName      = "Hill Giant";
+    private int     eatThresholdPercent = 50;
+    private boolean usePrayer           = false;
+    private Prayer  protectivePrayer    = Prayer.PROTECT_FROM_MELEE;
+    private Prayer  offensivePrayer     = null;
+    private int     prayerPotPercent    = 30;
+    private boolean lootEnabled         = false;
+    private Set<Integer> lootItemIds    = new HashSet<>();
+    private boolean useSpec             = false;
+    private int     specThreshold       = 100;
+    private boolean bankingMode         = false;
 
-    // Configurable via BotEngineConfig — set in configure()
-    private String targetNpcName = "Hill Giant";
-    private int eatThresholdPercent = 50;
-
+    // ── Runtime state ─────────────────────────────────────────────────────────
     private State state = State.FIND_TARGET;
-    private int idleTickCount = 0;
-    private int cameraRetryCount = 0;
+    private int   idleTickCount   = 0;
+    private int   cameraRetryCount = 0;
+    private WorldPoint homeTile;
 
     @Inject
     public CombatScript() {}
@@ -62,24 +74,48 @@ public class CombatScript extends BotScript
     @Override
     public void configure(BotEngineConfig config)
     {
-        targetNpcName = config.combatTarget();
+        targetNpcName       = config.combatTarget();
         eatThresholdPercent = config.combatEatPercent();
+        usePrayer           = config.combatUsePrayer();
+        prayerPotPercent    = config.combatPrayerPotPercent();
+        lootEnabled         = config.combatLootEnabled();
+        useSpec             = config.combatUseSpec();
+        specThreshold       = config.combatSpecPercent();
+        bankingMode         = config.combatBankingMode();
+
+        protectivePrayer = parsePrayer(config.combatPrayerType(), Prayer.PROTECT_FROM_MELEE);
+        offensivePrayer  = parsePrayer(config.combatOffensivePrayer(), null);
+
+        lootItemIds.clear();
+        for (String part : config.combatLootItemIds().split(","))
+        {
+            try { lootItemIds.add(Integer.parseInt(part.trim())); }
+            catch (NumberFormatException ignored) {}
+        }
     }
 
     @Override
     public void onStart()
     {
-        log.info("Started — targeting '{}', eat below {}% HP", targetNpcName, eatThresholdPercent);
+        log.info("Started — target='{}' eat={}% prayer={} loot={} spec={} banking={}",
+            targetNpcName, eatThresholdPercent, usePrayer, lootEnabled, useSpec, bankingMode);
         state = State.FIND_TARGET;
         cameraRetryCount = 0;
+        homeTile = players.getLocation();
     }
 
     @Override
     public void onLoop()
     {
-        log.info("onLoop state={} npcsInScene={}", state, npcs.all(npc -> true).size());
+        // Prayer pot drinking has highest priority — keeps prayer active
+        if (usePrayer && prayers.shouldDrinkPotion(prayerPotPercent) && prayers.hasPotion())
+        {
+            prayers.drinkPotion();
+            antiban.reactionDelay();
+            return;
+        }
 
-        // Eating takes priority — always check HP first
+        // Food eating second highest priority
         if (shouldEat())
         {
             eatFood();
@@ -88,24 +124,18 @@ public class CombatScript extends BotScript
 
         switch (state)
         {
-            case FIND_TARGET:
-                findAndAttack();
-                break;
-
-            case ATTACKING:
-                checkCombatState();
-                break;
-
-            case EATING:
-                // After eating, reassess
-                state = State.FIND_TARGET;
-                break;
+            case FIND_TARGET:   findAndAttack();    break;
+            case ATTACKING:     checkCombatState(); break;
+            case EATING:        state = State.FIND_TARGET; break;
+            case LOOTING:       lootItems();        break;
+            case BANKING:       handleBanking();    break;
         }
     }
 
     @Override
     public void onStop()
     {
+        if (usePrayer) prayers.deactivateAll();
         log.info("Stopped");
     }
 
@@ -113,19 +143,22 @@ public class CombatScript extends BotScript
 
     private void findAndAttack()
     {
-        NPC target = npcs.nearest(targetNpcName);
-        log.info("FIND_TARGET: nearest={}", target == null ? "null" : target.getName() + "/" + target.getId());
-        if (target == null)
+        // Check if we should bank first (out of food, banking mode enabled)
+        if (bankingMode && !hasFood() && !bank.isNearBank())
         {
-            log.info("No target found nearby — all NPCs: {}", npcs.all(npc -> true).stream()
-                .map(n -> n.getName() + "/" + n.getId()).collect(java.util.stream.Collectors.joining(", ")));
+            log.info("Out of food — banking");
+            state = State.BANKING;
             return;
         }
 
-        if (target.isDead())
+        NPC target = npcs.nearest(targetNpcName);
+        if (target == null || target.isDead()) return;
+
+        // Activate spec before attacking if threshold met
+        if (useSpec && combat.canSpec(specThreshold) && !combat.isSpecActive())
         {
-            log.info("Nearest target is dead — waiting for respawn");
-            return;
+            combat.activateSpec();
+            antiban.reactionDelay();
         }
 
         boolean clicked = combat.attackNpc(target);
@@ -133,32 +166,33 @@ public class CombatScript extends BotScript
         {
             if (cameraRetryCount < MAX_CAMERA_RETRIES)
             {
-                log.debug("Target off-screen — rotating camera ({}/{})", cameraRetryCount + 1, MAX_CAMERA_RETRIES);
                 camera.rotateTo(target.getWorldLocation());
                 cameraRetryCount++;
             }
             else
             {
-                log.debug("Target unreachable after {} camera retries — searching again", MAX_CAMERA_RETRIES);
                 cameraRetryCount = 0;
             }
             return;
         }
+
         cameraRetryCount = 0;
+
+        // Activate prayers on first attack
+        if (usePrayer)
+        {
+            if (!prayers.isActive(protectivePrayer))  prayers.activate(protectivePrayer);
+            if (offensivePrayer != null && !prayers.isActive(offensivePrayer)) prayers.activate(offensivePrayer);
+        }
+
         antiban.reactionDelay();
         state = State.ATTACKING;
         idleTickCount = 0;
-        log.info("Attacking NPC id={} name={} index={}", target.getId(), target.getName(), target.getIndex());
+        log.debug("Attacking {} (id={} index={})", target.getName(), target.getId(), target.getIndex());
     }
 
     private void checkCombatState()
     {
-        net.runelite.api.Actor interacting = players.getTarget();
-        int anim = players.getAnimation();
-        log.info("checkCombat: interacting={} anim={} inCombat={}",
-            interacting == null ? "null" : interacting.getName(),
-            anim,
-            players.isInCombat());
         if (players.isInCombat())
         {
             idleTickCount = 0;
@@ -168,15 +202,90 @@ public class CombatScript extends BotScript
         idleTickCount++;
         if (idleTickCount >= IDLE_TIMEOUT_TICKS)
         {
-            log.debug("No longer in combat — finding new target");
-            state = State.FIND_TARGET;
+            // Deactivate offensive prayer when not fighting to save points
+            if (usePrayer && offensivePrayer != null) prayers.deactivate(offensivePrayer);
+
+            // Check for loot before finding next target
+            if (lootEnabled && hasLootNearby())
+            {
+                state = State.LOOTING;
+            }
+            else
+            {
+                state = State.FIND_TARGET;
+            }
             idleTickCount = 0;
         }
     }
 
+    private void lootItems()
+    {
+        boolean pickedUp = false;
+        for (int itemId : lootItemIds)
+        {
+            GroundItems.TileItemOnTile result = groundItems.nearestWithTile(itemId);
+            if (result != null)
+            {
+                interaction.click(result.item, result.tile);
+                antiban.reactionDelay();
+                pickedUp = true;
+                break; // one item per tick
+            }
+        }
+
+        if (!pickedUp || !hasLootNearby())
+        {
+            state = State.FIND_TARGET;
+        }
+    }
+
+    private void handleBanking()
+    {
+        if (bank.isOpen())
+        {
+            bank.depositAll();
+            antiban.reactionDelay();
+            // Withdraw food after depositing
+            for (int foodId : FOOD_IDS)
+            {
+                if (bank.contains(foodId))
+                {
+                    bank.withdraw(foodId, Integer.MAX_VALUE);
+                    antiban.reactionDelay();
+                    break;
+                }
+            }
+            bank.close();
+            state = State.FIND_TARGET;
+            return;
+        }
+
+        // Walk to bank or open it
+        if (bank.isNearBank())
+        {
+            bank.openNearest();
+        }
+        else
+        {
+            // Walk toward home (nearest bank is near typical training spots)
+            movement.walkTo(homeTile);
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
     private boolean shouldEat()
     {
-        return players.shouldEat(eatThresholdPercent);
+        return players.shouldEat(eatThresholdPercent) && hasFood();
+    }
+
+    private boolean hasFood()
+    {
+        for (int foodId : FOOD_IDS)
+        {
+            if (inventory.contains(foodId)) return true;
+        }
+        return false;
     }
 
     private void eatFood()
@@ -192,6 +301,22 @@ public class CombatScript extends BotScript
                 return;
             }
         }
-        log.warn("No food in inventory — low HP, cannot eat!");
+        log.warn("No food in inventory — low HP!");
+    }
+
+    private boolean hasLootNearby()
+    {
+        for (int itemId : lootItemIds)
+        {
+            if (groundItems.exists(itemId)) return true;
+        }
+        return false;
+    }
+
+    private static Prayer parsePrayer(String name, Prayer fallback)
+    {
+        if (name == null || name.isBlank()) return fallback;
+        try { return Prayer.valueOf(name.trim().toUpperCase()); }
+        catch (IllegalArgumentException e) { return fallback; }
     }
 }

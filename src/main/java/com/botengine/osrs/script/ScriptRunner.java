@@ -5,12 +5,14 @@ import com.botengine.osrs.api.Bank;
 import com.botengine.osrs.api.Camera;
 import com.botengine.osrs.api.Combat;
 import com.botengine.osrs.api.GameObjects;
+import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.api.Interaction;
 import com.botengine.osrs.api.Inventory;
 import com.botengine.osrs.api.Magic;
 import com.botengine.osrs.api.Movement;
 import com.botengine.osrs.api.Npcs;
 import com.botengine.osrs.api.Players;
+import com.botengine.osrs.api.Prayers;
 import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.util.Log;
 import com.botengine.osrs.util.Time;
@@ -56,6 +58,8 @@ public class ScriptRunner
     private final Magic magic;
     private final Combat combat;
     private final Camera camera;
+    private final Prayers prayers;
+    private final GroundItems groundItems;
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     private final Antiban antiban;
@@ -93,6 +97,8 @@ public class ScriptRunner
         Magic magic,
         Combat combat,
         Camera camera,
+        Prayers prayers,
+        GroundItems groundItems,
         Antiban antiban,
         Time time,
         Log botLog,
@@ -110,6 +116,8 @@ public class ScriptRunner
         this.magic = magic;
         this.combat = combat;
         this.camera = camera;
+        this.prayers = prayers;
+        this.groundItems = groundItems;
         this.antiban = antiban;
         this.time = time;
         this.botLog = botLog;
@@ -183,7 +191,7 @@ public class ScriptRunner
         activeScript.inject(
             client, players, npcs, gameObjects, inventory,
             bank, movement, interaction, magic, combat, camera,
-            antiban, time, botLog
+            prayers, groundItems, antiban, time, botLog
         );
         activeScript.configure(config); // apply per-script settings from config panel
 

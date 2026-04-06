@@ -1,8 +1,11 @@
 package com.botengine.osrs.scripts.woodcutting;
 
 import com.botengine.osrs.BotEngineConfig;
+import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.script.BotScript;
 import net.runelite.api.GameObject;
+import net.runelite.api.ObjectComposition;
+import net.runelite.api.coords.WorldPoint;
 
 import javax.inject.Inject;
 
@@ -10,54 +13,44 @@ import javax.inject.Inject;
  * Woodcutting AFK script.
  *
  * State machine:
- *   FIND_TREE → CHOPPING → (inventory full) → DROPPING → FIND_TREE
+ *   FIND_TREE → CHOPPING → (full) → DROPPING or BANKING → FIND_TREE
  *
- * Supports all common tree types by NPC/object ID. Drops logs when inventory
- * is full (power-chopping mode). Does not bank — pure XP-focused loop.
- *
- * Tree IDs (GameObject):
- *   Regular: 1276, 1278, 1294, 1286
- *   Oak:     10820
- *   Willow:  10829, 10831, 10833
- *   Maple:   10832
- *   Yew:     10822, 10823
- *   Magic:   10834, 10835
+ * Features:
+ *   - Power-chop (drop) or banking mode
+ *   - Optional tree name filter (e.g. "Yew", "Willow")
+ *   - Bird nest detection — picks up nests before continuing
+ *   - Animation-based chop detection
  */
 public class WoodcuttingScript extends BotScript
 {
-    // Common tree GameObject IDs (regular through magic)
     private static final int[] TREE_IDS = {
-        1276, 1278, 1294, 1286,          // Regular trees
-        10820,                            // Oak
-        10829, 10831, 10833,              // Willow
-        10832,                            // Maple
-        10822, 10823,                     // Yew
-        10834, 10835                      // Magic
+        1276, 1278, 1294, 1286,
+        10820,
+        10829, 10831, 10833,
+        10832,
+        10822, 10823,
+        10834, 10835
     };
 
-    // Log item IDs (all types, for drop-all)
     private static final int[] LOG_IDS = {
-        1511,  // Logs
-        1521,  // Oak logs
-        1519,  // Willow logs
-        1517,  // Maple logs
-        1515,  // Yew logs
-        1513   // Magic logs
+        1511, 1521, 1519, 1517, 1515, 1513
     };
 
-    // Animation IDs for woodcutting with various axes
+    /** Bird nest item ID dropped while chopping. */
+    private static final int BIRD_NEST_ID = 5074;
+
     private static final int[] CHOP_ANIMATIONS = {
-        867, 868, 869, 870, 871, 872, 873,  // Bronze–Dragon axe
-        2846,                                // Infernal axe
-        7251                                 // Crystal axe
+        867, 868, 869, 870, 871, 872, 873,
+        2846, 7251
     };
 
-    private enum State { FIND_TREE, CHOPPING, DROPPING }
+    private enum State { FIND_TREE, CHOPPING, DROPPING, BANKING }
 
     private State state = State.FIND_TREE;
-
-    /** Name filter from config — empty means accept any tree in TREE_IDS. */
-    private String treeNameFilter = "";
+    private String  treeNameFilter = "";
+    private boolean bankingMode    = false;
+    private boolean pickupNests    = true;
+    private WorldPoint homeTile;
 
     @Inject
     public WoodcuttingScript() {}
@@ -69,14 +62,17 @@ public class WoodcuttingScript extends BotScript
     public void configure(BotEngineConfig config)
     {
         treeNameFilter = config.woodcuttingTreeName().trim();
+        bankingMode    = config.woodcuttingBankingMode();
+        pickupNests    = config.woodcuttingPickupNests();
     }
 
     @Override
     public void onStart()
     {
-        String target = treeNameFilter.isEmpty() ? "any tree" : treeNameFilter;
-        log.info("Started — power-chop mode, target: {}", target);
-        state = State.FIND_TREE;
+        log.info("Started — target='{}' banking={} nests={}",
+            treeNameFilter.isEmpty() ? "any" : treeNameFilter, bankingMode, pickupNests);
+        state    = State.FIND_TREE;
+        homeTile = players.getLocation();
     }
 
     @Override
@@ -84,34 +80,35 @@ public class WoodcuttingScript extends BotScript
     {
         switch (state)
         {
-            case FIND_TREE:
-                findAndChopTree();
-                break;
-
-            case CHOPPING:
-                checkChoppingState();
-                break;
-
-            case DROPPING:
-                dropLogs();
-                break;
+            case FIND_TREE:  findAndChopTree();     break;
+            case CHOPPING:   checkChoppingState();  break;
+            case DROPPING:   dropLogs();            break;
+            case BANKING:    handleBanking();        break;
         }
     }
 
     @Override
-    public void onStop()
-    {
-        log.info("Stopped");
-    }
+    public void onStop() { log.info("Stopped"); }
 
     // ── State handlers ────────────────────────────────────────────────────────
 
     private void findAndChopTree()
     {
+        // Pick up any bird nests before doing anything else
+        if (pickupNests)
+        {
+            GroundItems.TileItemOnTile nest = groundItems.nearestWithTile(BIRD_NEST_ID);
+            if (nest != null)
+            {
+                interaction.click(nest.item, nest.tile);
+                antiban.reactionDelay();
+                return;
+            }
+        }
+
         if (inventory.isFull())
         {
-            log.debug("Inventory full — dropping logs");
-            state = State.DROPPING;
+            state = bankingMode ? State.BANKING : State.DROPPING;
             return;
         }
 
@@ -125,55 +122,34 @@ public class WoodcuttingScript extends BotScript
         interaction.click(tree, "Chop down");
         antiban.reactionDelay();
         state = State.CHOPPING;
-        log.debug("Chopping tree (id={})", tree.getId());
+        log.debug("Chopping tree id={}", tree.getId());
     }
 
     private void checkChoppingState()
     {
+        // Pick up bird nests while waiting between chops
+        if (pickupNests)
+        {
+            GroundItems.TileItemOnTile nest = groundItems.nearestWithTile(BIRD_NEST_ID);
+            if (nest != null)
+            {
+                interaction.click(nest.item, nest.tile);
+                antiban.reactionDelay();
+                return;
+            }
+        }
+
         if (inventory.isFull())
         {
-            state = State.DROPPING;
+            state = bankingMode ? State.BANKING : State.DROPPING;
             return;
         }
 
-        // If no active chop animation, the tree has depleted or we were interrupted
         if (!isActivelyChopping())
         {
             antiban.randomDelay(300, 700);
             state = State.FIND_TREE;
         }
-    }
-
-    private GameObject findTree()
-    {
-        if (treeNameFilter.isEmpty())
-        {
-            return gameObjects.nearest(TREE_IDS);
-        }
-        // Filter by name when a specific tree type is configured
-        final String filter = treeNameFilter.toLowerCase();
-        return gameObjects.nearest(obj -> {
-            for (int id : TREE_IDS)
-            {
-                if (obj.getId() == id)
-                {
-                    net.runelite.api.ObjectComposition def = client.getObjectDefinition(obj.getId());
-                    return def != null && def.getName() != null
-                        && def.getName().toLowerCase().contains(filter);
-                }
-            }
-            return false;
-        });
-    }
-
-    private boolean isActivelyChopping()
-    {
-        int anim = players.getAnimation();
-        for (int chopAnim : CHOP_ANIMATIONS)
-        {
-            if (anim == chopAnim) return true;
-        }
-        return false;
     }
 
     private void dropLogs()
@@ -188,10 +164,65 @@ public class WoodcuttingScript extends BotScript
                 droppedAny = true;
             }
         }
+        if (!droppedAny || inventory.isEmpty()) state = State.FIND_TREE;
+    }
 
-        if (!droppedAny || inventory.isEmpty())
+    private void handleBanking()
+    {
+        if (bank.isOpen())
         {
-            state = State.FIND_TREE;
+            bank.depositAll();
+            antiban.reactionDelay();
+            bank.close();
+            // Walk back to chopping spot
+            if (homeTile != null && movement.distanceTo(homeTile) > 5)
+            {
+                movement.walkTo(homeTile);
+            }
+            else
+            {
+                state = State.FIND_TREE;
+            }
+            return;
         }
+
+        if (bank.isNearBank())
+        {
+            bank.openNearest();
+        }
+        else
+        {
+            movement.setRunning(true);
+            // Walk toward where we'll find a bank (use homeTile as reference,
+            // but since we need a bank we just scan the scene each tick)
+            log.debug("Walking to find bank...");
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private GameObject findTree()
+    {
+        if (treeNameFilter.isEmpty()) return gameObjects.nearest(TREE_IDS);
+        final String filter = treeNameFilter.toLowerCase();
+        return gameObjects.nearest(obj -> {
+            for (int id : TREE_IDS)
+            {
+                if (obj.getId() == id)
+                {
+                    ObjectComposition def = client.getObjectDefinition(obj.getId());
+                    return def != null && def.getName() != null
+                        && def.getName().toLowerCase().contains(filter);
+                }
+            }
+            return false;
+        });
+    }
+
+    private boolean isActivelyChopping()
+    {
+        int anim = players.getAnimation();
+        for (int a : CHOP_ANIMATIONS) { if (anim == a) return true; }
+        return false;
     }
 }

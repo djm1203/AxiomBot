@@ -99,6 +99,89 @@ public interface BotEngineConfig extends Config
     @Range(min = 10, max = 95)
     default int combatEatPercent() { return 50; }
 
+    @ConfigItem(
+        keyName = "combatUsePrayer",
+        name = "Use protective prayer",
+        description = "Activate a protective prayer while in combat",
+        section = combatSection,
+        position = 2
+    )
+    default boolean combatUsePrayer() { return false; }
+
+    @ConfigItem(
+        keyName = "combatPrayerType",
+        name = "Protective prayer",
+        description = "Which prayer to activate (PROTECT_FROM_MELEE, PROTECT_FROM_MISSILES, PROTECT_FROM_MAGIC)",
+        section = combatSection,
+        position = 3
+    )
+    default String combatPrayerType() { return "PROTECT_FROM_MELEE"; }
+
+    @ConfigItem(
+        keyName = "combatOffensivePrayer",
+        name = "Offensive prayer",
+        description = "Offensive prayer to activate while attacking (PIETY, RIGOUR, AUGURY, or blank for none)",
+        section = combatSection,
+        position = 4
+    )
+    default String combatOffensivePrayer() { return ""; }
+
+    @ConfigItem(
+        keyName = "combatPrayerPotPercent",
+        name = "Drink prayer pot below %",
+        description = "Drink prayer potion when prayer points drop at or below this percentage",
+        section = combatSection,
+        position = 5
+    )
+    @Range(min = 5, max = 80)
+    default int combatPrayerPotPercent() { return 30; }
+
+    @ConfigItem(
+        keyName = "combatLootEnabled",
+        name = "Pick up loot",
+        description = "Pick up ground items after kills",
+        section = combatSection,
+        position = 6
+    )
+    default boolean combatLootEnabled() { return false; }
+
+    @ConfigItem(
+        keyName = "combatLootItemIds",
+        name = "Loot item IDs",
+        description = "Comma-separated item IDs to loot (e.g. 995,4151,1079). Leave blank to loot nothing.",
+        section = combatSection,
+        position = 7
+    )
+    default String combatLootItemIds() { return "995"; }
+
+    @ConfigItem(
+        keyName = "combatUseSpec",
+        name = "Use special attack",
+        description = "Activate special attack when spec bar reaches threshold",
+        section = combatSection,
+        position = 8
+    )
+    default boolean combatUseSpec() { return false; }
+
+    @ConfigItem(
+        keyName = "combatSpecPercent",
+        name = "Spec at % energy",
+        description = "Use special attack when spec bar is at or above this percentage",
+        section = combatSection,
+        position = 9
+    )
+    @Range(min = 25, max = 100)
+    default int combatSpecPercent() { return 100; }
+
+    @ConfigItem(
+        keyName = "combatBankingMode",
+        name = "Banking mode",
+        description = "When inventory is full, walk to nearest bank instead of dropping",
+        section = combatSection,
+        position = 10
+    )
+    default boolean combatBankingMode() { return false; }
+
     // ── Woodcutting section ───────────────────────────────────────────────────
 
     @ConfigSection(
@@ -116,6 +199,24 @@ public interface BotEngineConfig extends Config
         position = 0
     )
     default String woodcuttingTreeName() { return ""; }
+
+    @ConfigItem(
+        keyName = "woodcuttingBankingMode",
+        name = "Banking mode",
+        description = "Walk to bank and deposit logs instead of dropping them",
+        section = woodcuttingSection,
+        position = 1
+    )
+    default boolean woodcuttingBankingMode() { return false; }
+
+    @ConfigItem(
+        keyName = "woodcuttingPickupNests",
+        name = "Pick up bird nests",
+        description = "Pick up bird nests that drop while chopping",
+        section = woodcuttingSection,
+        position = 2
+    )
+    default boolean woodcuttingPickupNests() { return true; }
 
     // ── Mining section ────────────────────────────────────────────────────────
 
@@ -135,6 +236,15 @@ public interface BotEngineConfig extends Config
     )
     default String miningRockName() { return ""; }
 
+    @ConfigItem(
+        keyName = "miningBankingMode",
+        name = "Banking mode",
+        description = "Walk to bank and deposit ore instead of dropping it",
+        section = miningSection,
+        position = 1
+    )
+    default boolean miningBankingMode() { return false; }
+
     // ── Fishing section ───────────────────────────────────────────────────────
 
     @ConfigSection(
@@ -153,12 +263,75 @@ public interface BotEngineConfig extends Config
     )
     default String fishingAction() { return "Lure"; }
 
+    @ConfigItem(
+        keyName = "fishingBankingMode",
+        name = "Banking mode",
+        description = "Walk to bank and deposit fish instead of dropping them",
+        section = fishingSection,
+        position = 1
+    )
+    default boolean fishingBankingMode() { return false; }
+
+    // ── Alchemy section ───────────────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Alchemy",
+        description = "Settings for the High Alchemy script",
+        position = 6
+    )
+    String alchemySection = "alchemy";
+
+    @ConfigItem(
+        keyName = "alchemyItemId",
+        name = "Item ID to alch",
+        description = "Specific item ID to high alch. Set to 0 to auto-detect non-rune items in inventory.",
+        section = alchemySection,
+        position = 0
+    )
+    default int alchemyItemId() { return 0; }
+
+    @ConfigItem(
+        keyName = "alchemyBankingMode",
+        name = "Banking mode",
+        description = "Walk to bank to restock nature runes and items when supply runs out",
+        section = alchemySection,
+        position = 1
+    )
+    default boolean alchemyBankingMode() { return false; }
+
+    // ── General banking section ───────────────────────────────────────────────
+
+    @ConfigSection(
+        name = "Cooking / Smithing / Fletching / Crafting",
+        description = "Shared settings for production scripts",
+        position = 7
+    )
+    String productionSection = "production";
+
+    @ConfigItem(
+        keyName = "productionBankingMode",
+        name = "Banking mode",
+        description = "Walk to bank to restock materials when inventory is empty",
+        section = productionSection,
+        position = 0
+    )
+    default boolean productionBankingMode() { return false; }
+
+    @ConfigItem(
+        keyName = "smithingItemName",
+        name = "Smithing item name",
+        description = "Item to smith at the anvil (e.g. Platebody, Platelegs, Helm). Leave blank to smith the first available item.",
+        section = productionSection,
+        position = 1
+    )
+    default String smithingItemName() { return ""; }
+
     // ── Debug section ─────────────────────────────────────────────────────────
 
     @ConfigSection(
         name = "Debug",
         description = "Developer tools and debug overlays",
-        position = 6
+        position = 8
     )
     String debugSection = "debug";
 

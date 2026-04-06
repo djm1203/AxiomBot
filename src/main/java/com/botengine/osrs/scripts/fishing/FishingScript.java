@@ -3,6 +3,7 @@ package com.botengine.osrs.scripts.fishing;
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
 import net.runelite.api.NPC;
+import net.runelite.api.coords.WorldPoint;
 
 import javax.inject.Inject;
 
@@ -10,67 +11,38 @@ import javax.inject.Inject;
  * Fishing AFK script.
  *
  * State machine:
- *   FIND_SPOT → FISHING → (inventory full) → DROPPING → FIND_SPOT
+ *   FIND_SPOT → FISHING → (full) → DROPPING or BANKING → FIND_SPOT
  *
- * Targets fishing spots by NPC ID. Power-fishes (drops catch when inventory
- * is full) for maximum XP. Spots wander — when the current spot moves away
- * the script automatically finds the nearest active spot.
- *
- * Common fishing spot NPC IDs:
- *   1530 — Net/Bait (shrimp/anchovies/herring/pike)
- *   1526 — Lure/Bait (trout/salmon)
- *   1542 — Cage/Harpoon (lobster/swordfish/tuna)
- *   1544 — Big Net (mackerel/cod/bass/leaping)
- *   7730, 7731 — Barbarian rod spots
- *
- * Click action:
- *   Most spots use "Lure", "Bait", "Net", "Cage", or "Harpoon".
- *   The script clicks NPC_FIRST_OPTION which selects whatever is the first
- *   right-click option on the spot (matches the equipped tool).
+ * Features:
+ *   - Configurable click action (Lure/Bait/Net/Cage/Harpoon)
+ *   - Power-fish (drop) or banking mode
+ *   - Animation-based fishing detection
+ *   - Camera rotation for off-screen spots
  */
 public class FishingScript extends BotScript
 {
-    // All common fishing spot NPC IDs
     private static final int[] SPOT_IDS = {
-        1530, 1526, 1542, 1544,   // Common spots
-        7730, 7731,               // Barbarian fishing
-        1536, 1541,               // Fly fishing, cage
-        6825                      // Aerial fishing
+        1530, 1526, 1542, 1544,
+        7730, 7731,
+        1536, 1541,
+        6825
     };
 
-    // Fish item IDs to drop (raw fish)
     private static final int[] FISH_IDS = {
-        317,  // Raw shrimps
-        321,  // Raw anchovies
-        327,  // Raw sardine
-        335,  // Raw herring
-        339,  // Raw pike
-        349,  // Raw salmon
-        351,  // Raw trout
-        359,  // Raw tuna
-        371,  // Raw swordfish
-        377,  // Raw lobster
-        383,  // Raw shark
-        11328 // Leaping trout/salmon/sturgeon
+        317, 321, 327, 335, 339, 349, 351, 359, 371, 377, 383, 11328
     };
 
-    // Fishing animation IDs (various rods/nets)
     private static final int[] FISH_ANIMATIONS = {
-        623,  // Fly fishing rod / lure
-        622,  // Small net / bait
-        619,  // Harpoon
-        618,  // Cage
-        6705, // Barbarian rod
-        7331  // Aerial fishing
+        623, 622, 619, 618, 6705, 7331
     };
 
-    private enum State { FIND_SPOT, FISHING, DROPPING }
+    private enum State { FIND_SPOT, FISHING, DROPPING, BANKING }
 
     private State state = State.FIND_SPOT;
-    private int idleTickCount = 0;
-
-    /** Click action from config — determines which fishing option to use. */
-    private String fishingAction = "Lure";
+    private int   idleTickCount = 0;
+    private String  fishingAction = "Lure";
+    private boolean bankingMode   = false;
+    private WorldPoint homeTile;
 
     @Inject
     public FishingScript() {}
@@ -83,13 +55,15 @@ public class FishingScript extends BotScript
     {
         String action = config.fishingAction().trim();
         fishingAction = action.isEmpty() ? "Lure" : action;
+        bankingMode   = config.fishingBankingMode();
     }
 
     @Override
     public void onStart()
     {
-        log.info("Started — power-fishing mode, action: {}", fishingAction);
-        state = State.FIND_SPOT;
+        log.info("Started — action='{}' banking={}", fishingAction, bankingMode);
+        state    = State.FIND_SPOT;
+        homeTile = players.getLocation();
     }
 
     @Override
@@ -97,25 +71,15 @@ public class FishingScript extends BotScript
     {
         switch (state)
         {
-            case FIND_SPOT:
-                findAndFishSpot();
-                break;
-
-            case FISHING:
-                checkFishingState();
-                break;
-
-            case DROPPING:
-                dropFish();
-                break;
+            case FIND_SPOT: findAndFishSpot();    break;
+            case FISHING:   checkFishingState();  break;
+            case DROPPING:  dropFish();           break;
+            case BANKING:   handleBanking();      break;
         }
     }
 
     @Override
-    public void onStop()
-    {
-        log.info("Stopped");
-    }
+    public void onStop() { log.info("Stopped"); }
 
     // ── State handlers ────────────────────────────────────────────────────────
 
@@ -123,7 +87,7 @@ public class FishingScript extends BotScript
     {
         if (inventory.isFull())
         {
-            state = State.DROPPING;
+            state = bankingMode ? State.BANKING : State.DROPPING;
             return;
         }
 
@@ -137,10 +101,10 @@ public class FishingScript extends BotScript
         boolean clicked = interaction.click(spot, fishingAction);
         if (!clicked)
         {
-            log.debug("Fishing spot off-screen — rotating camera toward it");
             camera.rotateTo(spot.getWorldLocation());
             return;
         }
+
         antiban.reactionDelay();
         state = State.FISHING;
         idleTickCount = 0;
@@ -151,14 +115,13 @@ public class FishingScript extends BotScript
     {
         if (inventory.isFull())
         {
-            state = State.DROPPING;
+            state = bankingMode ? State.BANKING : State.DROPPING;
             return;
         }
 
         if (!isActivelyFishing())
         {
             idleTickCount++;
-            // Give a tick or two of grace before re-clicking (spot may have just moved)
             if (idleTickCount >= 2)
             {
                 antiban.randomDelay(200, 600);
@@ -170,16 +133,6 @@ public class FishingScript extends BotScript
         {
             idleTickCount = 0;
         }
-    }
-
-    private boolean isActivelyFishing()
-    {
-        int anim = players.getAnimation();
-        for (int fishAnim : FISH_ANIMATIONS)
-        {
-            if (anim == fishAnim) return true;
-        }
-        return false;
     }
 
     private void dropFish()
@@ -194,10 +147,45 @@ public class FishingScript extends BotScript
                 droppedAny = true;
             }
         }
+        if (!droppedAny || inventory.isEmpty()) state = State.FIND_SPOT;
+    }
 
-        if (!droppedAny || inventory.isEmpty())
+    private void handleBanking()
+    {
+        if (bank.isOpen())
         {
-            state = State.FIND_SPOT;
+            bank.depositAll();
+            antiban.reactionDelay();
+            bank.close();
+            if (homeTile != null && movement.distanceTo(homeTile) > 5)
+            {
+                movement.setRunning(true);
+                movement.walkTo(homeTile);
+            }
+            else
+            {
+                state = State.FIND_SPOT;
+            }
+            return;
         }
+
+        if (bank.isNearBank())
+        {
+            bank.openNearest();
+        }
+        else
+        {
+            movement.setRunning(true);
+            log.debug("Walking to find bank...");
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private boolean isActivelyFishing()
+    {
+        int anim = players.getAnimation();
+        for (int a : FISH_ANIMATIONS) { if (anim == a) return true; }
+        return false;
     }
 }
