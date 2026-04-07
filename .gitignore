@@ -9,6 +9,10 @@ target/
 # Maven wrapper
 .mvn/wrapper/maven-wrapper.jar
 
+# Maven site / generated docs
+site/
+target/site/
+
 # IntelliJ IDEA
 .idea/
 *.iws
@@ -25,9 +29,21 @@ target/
 .settings/
 bin/
 
+# NetBeans
+nbproject/
+nb-configuration.xml
+
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Temp / backup files
+*.tmp
+*.bak
+*.swp
+*.orig
 
 # Logs
 *.log
@@ -41,7 +57,18 @@ random.dat
 # Axiom secrets — never commit these
 sentry.properties
 *.dsn
+local.properties
 
 # ProGuard output (only committed as release artifacts)
 *-obfuscated.jar
 proguard_map.txt
+proguard_seed.txt
+
+# Maven shade plugin artifact — generated, not source
+dependency-reduced-pom.xml
+
+# Local dev notes — personal context, not for the repo
+notes/
+
+# Internal architecture / planning docs — not for distribution
+docs/

@@ -164,14 +164,9 @@
                             <obfuscate>true</obfuscate>
                             <proguardInclude>${project.basedir}/proguard.conf</proguardInclude>
                             <!-- RuneLite provided at runtime — needed for reference resolution -->
-                            <libs>
-                                <lib>${settings.localRepository}/net/runelite/client/${runelite.version}/client-${runelite.version}.jar</lib>
-                                <!-- Java 11+ modules -->
-                                <lib>${java.home}/jmods/java.base.jmod(!**.jar;!module-info.class)</lib>
-                                <lib>${java.home}/jmods/java.desktop.jmod(!**.jar;!module-info.class)</lib>
-                                <lib>${java.home}/jmods/java.logging.jmod(!**.jar;!module-info.class)</lib>
-                                <lib>${java.home}/jmods/java.net.http.jmod(!**.jar;!module-info.class)</lib>
-                            </libs>
+                            <!-- RuneLite provided deps are added automatically by the plugin.
+                                 JDK jmod libs are not needed because proguard.conf uses
+                                 -dontwarn/-dontnote/-dontoptimize/-dontpreverify. -->
                         </configuration>
                         <dependencies>
                             <dependency>

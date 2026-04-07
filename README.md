@@ -108,13 +108,17 @@ XxxConfigDialog.java    ← extends ScriptConfigDialog, builds the Swing UI
 - Maven 3.x
 - RuneLite built from source (tag `1.12.23` or `1.12.24-SNAPSHOT`)
 
+### Build commands
+
 ```bash
-# Build the fat JAR, skip tests
+# Dev build (fast, no obfuscation)
 mvn package -DskipTests
 
-# Output: target/bot-engine-osrs-1.0-SNAPSHOT.jar
+# Release build (ProGuard obfuscated, for distribution)
+mvn package -Prelease -DskipTests
+# Output: target/bot-engine-osrs-<version>-obfuscated.jar
 
-# Run all 285 unit tests
+# Run all unit tests
 mvn test
 ```
 
@@ -137,15 +141,19 @@ The source-built client needs credentials from your Jagex account. Do this once:
 
 Re-run step 2 whenever the session expires.
 
-### Deploy the plugin
+### Deploy the plugin and launch (one-liner)
 
 ```bash
-cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
+cp "C:/Users/dmart/Documents/Personal/scripts/bot_engine_osrs/target/bot-engine-osrs-1.0-SNAPSHOT.jar" "$HOME/.runelite/sideloaded-plugins/" && java -ea -jar "C:\Users\dmart\Documents\Personal\Github\runelite\runelite-client\build\libs\client-1.12.24-SNAPSHOT-shaded.jar" --developer-mode
 ```
 
-### Launch RuneLite with developer mode
+Or as two separate steps:
 
 ```bash
+# Deploy the plugin
+cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
+
+# Launch RuneLite with developer mode
 java -ea -jar "C:\Users\dmart\Documents\Personal\Github\runelite\runelite-client\build\libs\client-1.12.24-SNAPSHOT-shaded.jar" --developer-mode
 ```
 
@@ -162,6 +170,30 @@ mvn clean package -DskipTests
 cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
 # Full close + re-run the java command above
 ```
+
+---
+
+## New User Setup
+
+Run `setup.ps1` from the project root in PowerShell — it installs prerequisites, builds the JAR, and drops it into the sideloaded-plugins folder.
+
+**Prerequisite:** Log in to OSRS at least once via the Jagex Launcher before running the script. The source-built client reads credentials from `~/.runelite/credentials.properties`, which is only written after a real Jagex Launcher login with `RUNELITE_ARGS=--insecure-write-credentials` set (see the "One-time setup" section above).
+
+---
+
+## Infrastructure
+
+The project ships with a full build and distribution pipeline, all free and open-source:
+
+| Component | Details |
+|---|---|
+| **ProGuard release profile** | `mvn package -Prelease` → obfuscated JAR for distribution |
+| **GitHub Actions CI** | `.github/workflows/ci.yml` — runs tests on every push |
+| **GitHub Actions Release** | `.github/workflows/release.yml` — attaches obfuscated JAR to GitHub releases on tag push |
+| **Auto-update check** | `AutoUpdater.java` — checks GitHub releases API on startup, logs when a new version is available |
+| **Sentry crash reporting** | `AxiomSentry.java` — optional; set `AXIOM_SENTRY_DSN` env var to enable |
+
+See [docs/roadmap.md](docs/roadmap.md) for the full plan including planned phases (distribution installer, telemetry, licensing).
 
 ---
 
