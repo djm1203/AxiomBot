@@ -3,6 +3,7 @@ package com.botengine.osrs;
 import com.botengine.osrs.overlay.BotOverlay;
 import com.botengine.osrs.overlay.DebugOverlay;
 import com.botengine.osrs.script.ScriptRunner;
+import com.botengine.osrs.ui.AxiomPanel;
 import com.botengine.osrs.util.Antiban;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
@@ -41,9 +42,9 @@ import java.awt.image.BufferedImage;
  */
 @Slf4j
 @PluginDescriptor(
-    name = "Bot Engine",
+    name = "Axiom",
     description = "AFK scripting framework for skill automation",
-    tags = {"bot", "afk", "script", "automation"}
+    tags = {"axiom", "bot", "afk", "script", "automation"}
 )
 public class BotEnginePlugin extends Plugin
 {
@@ -55,7 +56,7 @@ public class BotEnginePlugin extends Plugin
     @Inject private ScriptRunner scriptRunner;
     @Inject private Antiban antiban;
 
-    @Inject private BotEnginePanel panel;
+    @Inject private AxiomPanel panel;
     @Inject private BotOverlay botOverlay;
     @Inject private DebugOverlay debugOverlay;
 
@@ -66,7 +67,7 @@ public class BotEnginePlugin extends Plugin
     @Override
     protected void startUp()
     {
-        log.info("Bot Engine starting up");
+        log.info("Axiom starting up");
 
         // Apply config to antiban
         antiban.setBreakIntervalMinutes(config.breakInterval());
@@ -85,20 +86,20 @@ public class BotEnginePlugin extends Plugin
 
         // Add control panel to the RuneLite side toolbar
         navButton = NavigationButton.builder()
-            .tooltip("Bot Engine")
+            .tooltip("Axiom")
             .icon(loadIcon())
             .priority(10)
             .panel(panel)
             .build();
         clientToolbar.addNavigation(navButton);
 
-        log.info("Bot Engine ready");
+        log.info("Axiom ready");
     }
 
     @Override
     protected void shutDown()
     {
-        log.info("Bot Engine shutting down");
+        log.info("Axiom shutting down");
 
         // Stop script cleanly
         scriptRunner.stop();
@@ -116,7 +117,7 @@ public class BotEnginePlugin extends Plugin
             clientToolbar.removeNavigation(navButton);
         }
 
-        log.info("Bot Engine stopped");
+        log.info("Axiom stopped");
     }
 
     // ── Config binding ────────────────────────────────────────────────────────
@@ -147,10 +148,10 @@ public class BotEnginePlugin extends Plugin
         g.setColor(new Color(30, 30, 30, 220));
         g.fillRoundRect(0, 0, 16, 16, 4, 4);
 
-        // Green "B" label
-        g.setColor(new Color(0, 200, 100));
+        // Orange "A" label (Axiom brand color)
+        g.setColor(new Color(220, 138, 0));
         g.setFont(new Font("SansSerif", Font.BOLD, 11));
-        g.drawString("B", 3, 12);
+        g.drawString("A", 3, 12);
 
         g.dispose();
         return img;

@@ -185,10 +185,10 @@ public class ScriptRunner
     // ── Control methods (called by BotEnginePanel) ────────────────────────────
 
     /**
-     * Sets the active script and immediately starts it.
+     * Sets the active script and starts it with per-script settings from the Axiom dialog.
      * If a script is already running, it is stopped first.
      */
-    public void start(BotScript script)
+    public void start(BotScript script, com.botengine.osrs.ui.ScriptSettings settings)
     {
         if (activeScript != null && state != ScriptState.STOPPED)
         {
@@ -201,13 +201,22 @@ public class ScriptRunner
             bank, movement, interaction, magic, combat, camera,
             prayers, groundItems, worldHopper, grandExchange, antiban, time, botLog
         );
-        activeScript.configure(config); // apply per-script settings from config panel
+        activeScript.configure(config, settings);
 
         botLog.info("Starting script: " + script.getName());
         activeScript.onStart();
         antiban.reset();
         consecutiveErrors = 0;
         state = ScriptState.RUNNING;
+    }
+
+    /**
+     * Backward-compatible overload — starts without per-script settings (null).
+     * Used by tests and any legacy callers.
+     */
+    public void start(BotScript script)
+    {
+        start(script, null);
     }
 
     /**

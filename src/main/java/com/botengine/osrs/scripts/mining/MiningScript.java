@@ -2,6 +2,8 @@ package com.botengine.osrs.scripts.mining;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import com.botengine.osrs.util.Progression;
 import net.runelite.api.GameObject;
 import net.runelite.api.ObjectComposition;
@@ -93,14 +95,22 @@ public class MiningScript extends BotScript
     public String getName() { return "Mining"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        rockNameFilter   = config.miningRockName().trim();
-        bankingMode      = config.miningBankingMode();
-        shiftDrop        = config.miningShiftDrop();
-        hopOnCompetition = config.miningHopOnCompetition();
-        motherlodeMode   = config.miningMotherlodeMode();
-        progression      = new Progression(config.miningProgression(), rockNameFilter);
+        MiningSettings s = (scriptSettings instanceof MiningSettings)
+            ? (MiningSettings) scriptSettings : new MiningSettings();
+        rockNameFilter   = s.rockNameFilter.trim();
+        bankingMode      = s.bankingMode;
+        shiftDrop        = s.shiftDrop;
+        hopOnCompetition = s.hopOnCompetition;
+        motherlodeMode   = s.motherlodeMode;
+        progression      = new Progression(s.progression, rockNameFilter);
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new MiningConfigDialog(parent);
     }
 
     @Override

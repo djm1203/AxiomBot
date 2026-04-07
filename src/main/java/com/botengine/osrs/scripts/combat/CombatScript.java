@@ -3,6 +3,8 @@ package com.botengine.osrs.scripts.combat;
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import net.runelite.api.GameObject;
 import net.runelite.api.NPC;
 import net.runelite.api.ObjectComposition;
@@ -87,32 +89,38 @@ public class CombatScript extends BotScript
     public String getName() { return "Combat"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        configRef = config;
-        targetNpcName       = config.combatTarget();
-        eatThresholdPercent = config.combatEatPercent();
-        usePrayer           = config.combatUsePrayer();
-        prayerPotPercent    = config.combatPrayerPotPercent();
-        lootEnabled         = config.combatLootEnabled();
-        useSpec             = config.combatUseSpec();
-        specThreshold       = config.combatSpecPercent();
-        bankingMode         = config.combatBankingMode();
-
-        protectivePrayer = parsePrayer(config.combatPrayerType(), Prayer.PROTECT_FROM_MELEE);
-        offensivePrayer  = parsePrayer(config.combatOffensivePrayer(), null);
-        emergencyLogout   = config.emergencyLogoutEnabled();
-        emergencyLogoutHp = config.emergencyLogoutHpPercent();
-        sandCrabsMode           = config.combatSandCrabsMode();
-        cannonMode              = config.combatCannonMode();
-        cannonRefillThreshold   = config.combatCannonRefillThreshold();
-
+        configRef = globalConfig;
+        CombatSettings s = (scriptSettings instanceof CombatSettings)
+            ? (CombatSettings) scriptSettings : new CombatSettings();
+        targetNpcName         = s.targetNpcName;
+        eatThresholdPercent   = s.eatThresholdPercent;
+        usePrayer             = s.usePrayer;
+        prayerPotPercent      = s.prayerPotPercent;
+        lootEnabled           = s.lootEnabled;
+        useSpec               = s.useSpec;
+        specThreshold         = s.specThreshold;
+        bankingMode           = s.bankingMode;
+        sandCrabsMode         = s.sandCrabsMode;
+        cannonMode            = s.cannonMode;
+        cannonRefillThreshold = s.cannonRefillThreshold;
+        emergencyLogout       = s.emergencyLogoutEnabled;
+        emergencyLogoutHp     = s.emergencyLogoutHpPercent;
+        protectivePrayer      = parsePrayer(s.protectivePrayer, Prayer.PROTECT_FROM_MELEE);
+        offensivePrayer       = parsePrayer(s.offensivePrayer, null);
         lootItemIds.clear();
-        for (String part : config.combatLootItemIds().split(","))
+        for (String part : s.lootItemIds.split(","))
         {
             try { lootItemIds.add(Integer.parseInt(part.trim())); }
             catch (NumberFormatException ignored) {}
         }
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new CombatConfigDialog(parent);
     }
 
     @Override

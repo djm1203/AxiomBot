@@ -2,6 +2,8 @@ package com.botengine.osrs.scripts.fletching;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
 
@@ -54,9 +56,17 @@ public class FletchingScript extends BotScript
     public String getName() { return "Fletching"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        bankingMode = config.productionBankingMode();
+        FletchingSettings s = (scriptSettings instanceof FletchingSettings)
+            ? (FletchingSettings) scriptSettings : new FletchingSettings();
+        bankingMode = s.bankingMode;
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new FletchingConfigDialog(parent);
     }
 
     @Override

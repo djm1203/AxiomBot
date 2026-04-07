@@ -2,6 +2,8 @@ package com.botengine.osrs.scripts.fishing;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import com.botengine.osrs.util.Progression;
 import net.runelite.api.NPC;
 import net.runelite.api.coords.WorldPoint;
@@ -54,13 +56,21 @@ public class FishingScript extends BotScript
     public String getName() { return "Fishing"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        String action = config.fishingAction().trim();
+        FishingSettings s = (scriptSettings instanceof FishingSettings)
+            ? (FishingSettings) scriptSettings : new FishingSettings();
+        String action = s.fishingAction.trim();
         fishingAction = action.isEmpty() ? "Lure" : action;
-        bankingMode   = config.fishingBankingMode();
-        shiftDrop     = config.fishingShiftDrop();
-        progression = new Progression(config.fishingProgression(), fishingAction);
+        bankingMode   = s.bankingMode;
+        shiftDrop     = s.shiftDrop;
+        progression   = new Progression(s.progression, fishingAction);
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new FishingConfigDialog(parent);
     }
 
     @Override

@@ -1,6 +1,8 @@
 package com.botengine.osrs.script;
 
 import com.botengine.osrs.BotEngineConfig;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import com.botengine.osrs.api.Bank;
 import com.botengine.osrs.api.Camera;
 import com.botengine.osrs.api.Combat;
@@ -129,15 +131,34 @@ public abstract class BotScript
     // ── Optional configuration ────────────────────────────────────────────────
 
     /**
-     * Called by ScriptRunner after inject() and before onStart() to pass the
-     * current plugin config to the script. Scripts that have configurable settings
-     * (e.g. target NPC name, eat threshold) should override this and read their
-     * values from config.
+     * Called by ScriptRunner after inject() and before onStart().
+     * Passes both global plugin config (antiban, safety, debug) and the
+     * per-script settings populated from the Axiom config dialog.
      *
-     * Default implementation is a no-op — scripts that don't need config don't
-     * need to override this.
+     * Override this in each script to read field values.
+     * {@code scriptSettings} will be null when called from tests — guard with null check.
+     *
+     * @param globalConfig  global RuneLite config (antiban, emergency logout, debug)
+     * @param scriptSettings script-specific settings from the Axiom dialog (may be null)
      */
-    public void configure(BotEngineConfig config) {}
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings) {}
+
+    /**
+     * Backward-compatible overload — passes null for scriptSettings.
+     * Used by ScriptRunnerTest and any caller that hasn't migrated yet.
+     */
+    public final void configure(BotEngineConfig config)
+    {
+        configure(config, null);
+    }
+
+    /**
+     * Returns the per-script Axiom config dialog for this script.
+     * AxiomPanel calls this to open the configuration popup before starting.
+     *
+     * @param parent the panel used to anchor the dialog to RuneLite's window
+     */
+    public abstract ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent);
 
     // ── Contract every script must implement ─────────────────────────────────
 

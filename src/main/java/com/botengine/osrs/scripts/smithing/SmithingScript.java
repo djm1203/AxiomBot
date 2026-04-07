@@ -2,6 +2,8 @@ package com.botengine.osrs.scripts.smithing;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import net.runelite.api.GameObject;
 import net.runelite.api.NPC;
 import net.runelite.api.ObjectComposition;
@@ -84,11 +86,19 @@ public class SmithingScript extends BotScript
     public String getName() { return "Smithing"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        bankingMode      = config.productionBankingMode();
-        blastFurnaceMode = config.smithingBlastFurnaceMode();
-        useCoalBag       = config.smithingCoalBag();
+        SmithingSettings s = (scriptSettings instanceof SmithingSettings)
+            ? (SmithingSettings) scriptSettings : new SmithingSettings();
+        bankingMode      = s.bankingMode;
+        blastFurnaceMode = s.blastFurnaceMode;
+        useCoalBag       = s.useCoalBag;
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new SmithingConfigDialog(parent);
     }
 
     @Override

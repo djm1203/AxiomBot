@@ -61,6 +61,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- MigLayout — form-style layout manager for script config dialogs -->
+        <dependency>
+            <groupId>com.miglayout</groupId>
+            <artifactId>miglayout-swing</artifactId>
+            <version>11.4.2</version>
+        </dependency>
+
     </dependencies>
 
     <build>

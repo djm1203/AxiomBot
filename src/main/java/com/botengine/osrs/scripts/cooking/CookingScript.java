@@ -2,6 +2,8 @@ package com.botengine.osrs.scripts.cooking;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import net.runelite.api.GameObject;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
@@ -48,9 +50,17 @@ public class CookingScript extends BotScript
     public String getName() { return "Cooking"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        bankingMode = config.productionBankingMode();
+        CookingSettings s = (scriptSettings instanceof CookingSettings)
+            ? (CookingSettings) scriptSettings : new CookingSettings();
+        bankingMode = s.bankingMode;
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new CookingConfigDialog(parent);
     }
 
     @Override

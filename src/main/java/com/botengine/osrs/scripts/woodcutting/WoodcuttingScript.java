@@ -3,6 +3,8 @@ package com.botengine.osrs.scripts.woodcutting;
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import com.botengine.osrs.util.Progression;
 import net.runelite.api.GameObject;
 import net.runelite.api.ObjectComposition;
@@ -62,13 +64,21 @@ public class WoodcuttingScript extends BotScript
     public String getName() { return "Woodcutting"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        treeNameFilter   = config.woodcuttingTreeName().trim();
-        bankingMode      = config.woodcuttingBankingMode();
-        pickupNests      = config.woodcuttingPickupNests();
-        hopOnCompetition = config.woodcuttingHopOnCompetition();
-        progression = new Progression(config.woodcuttingProgression(), treeNameFilter);
+        WoodcuttingSettings s = (scriptSettings instanceof WoodcuttingSettings)
+            ? (WoodcuttingSettings) scriptSettings : new WoodcuttingSettings();
+        treeNameFilter   = s.treeNameFilter.trim();
+        bankingMode      = s.bankingMode;
+        pickupNests      = s.pickupNests;
+        hopOnCompetition = s.hopOnCompetition;
+        progression      = new Progression(s.progression, treeNameFilter);
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new WoodcuttingConfigDialog(parent);
     }
 
     @Override

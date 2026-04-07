@@ -2,6 +2,8 @@ package com.botengine.osrs.scripts.alchemy;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 
 import javax.inject.Inject;
 
@@ -42,10 +44,18 @@ public class AlchemyScript extends BotScript
     public String getName() { return "High Alchemy"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        configuredItemId = config.alchemyItemId();
-        bankingMode      = config.alchemyBankingMode();
+        AlchemySettings s = (scriptSettings instanceof AlchemySettings)
+            ? (AlchemySettings) scriptSettings : new AlchemySettings();
+        configuredItemId = s.alchemyItemId;
+        bankingMode      = s.bankingMode;
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new AlchemyConfigDialog(parent);
     }
 
     @Override

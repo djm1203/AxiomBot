@@ -2,6 +2,8 @@ package com.botengine.osrs.scripts.crafting;
 
 import com.botengine.osrs.BotEngineConfig;
 import com.botengine.osrs.script.BotScript;
+import com.botengine.osrs.ui.ScriptConfigDialog;
+import com.botengine.osrs.ui.ScriptSettings;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
 
@@ -44,9 +46,17 @@ public class CraftingScript extends BotScript
     public String getName() { return "Gem Cutting"; }
 
     @Override
-    public void configure(BotEngineConfig config)
+    public void configure(BotEngineConfig globalConfig, ScriptSettings scriptSettings)
     {
-        bankingMode = config.productionBankingMode();
+        CraftingSettings s = (scriptSettings instanceof CraftingSettings)
+            ? (CraftingSettings) scriptSettings : new CraftingSettings();
+        bankingMode = s.bankingMode;
+    }
+
+    @Override
+    public ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent parent)
+    {
+        return new CraftingConfigDialog(parent);
     }
 
     @Override
