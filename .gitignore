@@ -37,3 +37,11 @@ logs/
 jagex_cl_oldschool_LIVE
 random.dat
 .claude/
+
+# Axiom secrets — never commit these
+sentry.properties
+*.dsn
+
+# ProGuard output (only committed as release artifacts)
+*-obfuscated.jar
+proguard_map.txt

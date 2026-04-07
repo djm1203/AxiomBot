@@ -5,6 +5,8 @@ import com.botengine.osrs.overlay.DebugOverlay;
 import com.botengine.osrs.script.ScriptRunner;
 import com.botengine.osrs.ui.AxiomPanel;
 import com.botengine.osrs.util.Antiban;
+import com.botengine.osrs.util.AutoUpdater;
+import com.botengine.osrs.util.AxiomSentry;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
@@ -67,7 +69,15 @@ public class BotEnginePlugin extends Plugin
     @Override
     protected void startUp()
     {
-        log.info("Axiom starting up");
+        log.info("Axiom {} starting up", AutoUpdater.currentVersion());
+
+        // Crash reporting — disabled unless DSN is configured (see AxiomSentry)
+        AxiomSentry.init();
+
+        // Check for updates in background — logs if a new GitHub release is available
+        AutoUpdater.checkAsync(latest ->
+            log.info("Axiom update available: {} — download at github.com/{}", latest,
+                "OWNER/REPO"));  // TODO: replace with actual repo path
 
         // Apply config to antiban
         antiban.setBreakIntervalMinutes(config.breakInterval());

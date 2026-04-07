@@ -15,6 +15,9 @@
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <runelite.version>1.12.23</runelite.version>
+        <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
+        <!-- Sentry DSN — override with -Daxiom.sentry.dsn=... or env AXIOM_SENTRY_DSN -->
+        <axiom.sentry.dsn></axiom.sentry.dsn>
     </properties>
 
     <repositories>
@@ -71,6 +74,14 @@
     </dependencies>
 
     <build>
+        <!-- Filter version.properties so ${project.version} gets substituted -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+
         <plugins>
 
             <!-- Compiler — enforce Java 11 -->
@@ -125,5 +136,59 @@
 
         </plugins>
     </build>
+
+    <!-- ── Release profile: obfuscates the shaded JAR with ProGuard ──────────────
+         Usage: mvn package -Prelease
+         Output: target/bot-engine-osrs-<version>-obfuscated.jar
+    ─────────────────────────────────────────────────────────────────────────── -->
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.wvengen</groupId>
+                        <artifactId>proguard-maven-plugin</artifactId>
+                        <version>2.6.0</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals><goal>proguard</goal></goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <proguardVersion>7.5.0</proguardVersion>
+                            <!-- Read the shaded JAR, write a separate obfuscated output -->
+                            <injar>${project.build.finalName}.jar</injar>
+                            <outjar>${project.build.finalName}-obfuscated.jar</outjar>
+                            <obfuscate>true</obfuscate>
+                            <proguardInclude>${project.basedir}/proguard.conf</proguardInclude>
+                            <!-- RuneLite provided at runtime — needed for reference resolution -->
+                            <libs>
+                                <lib>${settings.localRepository}/net/runelite/client/${runelite.version}/client-${runelite.version}.jar</lib>
+                                <!-- Java 11+ modules -->
+                                <lib>${java.home}/jmods/java.base.jmod(!**.jar;!module-info.class)</lib>
+                                <lib>${java.home}/jmods/java.desktop.jmod(!**.jar;!module-info.class)</lib>
+                                <lib>${java.home}/jmods/java.logging.jmod(!**.jar;!module-info.class)</lib>
+                                <lib>${java.home}/jmods/java.net.http.jmod(!**.jar;!module-info.class)</lib>
+                            </libs>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>com.guardsquare</groupId>
+                                <artifactId>proguard-base</artifactId>
+                                <version>7.5.0</version>
+                            </dependency>
+                            <dependency>
+                                <groupId>com.guardsquare</groupId>
+                                <artifactId>proguard-core</artifactId>
+                                <version>9.1.6</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

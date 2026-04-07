@@ -1,84 +1,103 @@
-# Bot Engine OSRS
+# Axiom
 
-A standalone RuneLite plugin that provides an AFK scripting framework for skill automation in Old School RuneScape. Built as a learning exercise to understand game scripting architecture — how tools like DreamBot and RuneMate work under the hood.
+A RuneLite sideloaded plugin that provides an AFK scripting framework for skill automation in Old School RuneScape. Built as a learning exercise to understand how tools like TriBot, DreamBot, and RuneMate work under the hood.
 
 **All testing is done offline / on a private server. This is a learning project, not a production tool.**
 
 ---
 
-## What it does
+## What it is
 
-The plugin adds a side panel to RuneLite with a script selector and Start/Pause/Stop controls. Select a skill, press Start, and the bot runs that skill's automation loop on every game tick (~600ms) until you stop it.
+Axiom adds an "⚡ AXIOM" side panel to RuneLite. Each script has its own configuration dialog (not RuneLite config strings) — you pick a script, click **Configure & Start**, fill out the settings, and click **Start Script**. The script then runs its automation loop on every game tick (~600ms) until you stop it.
 
-Scripts use a state machine pattern (`FIND_TARGET → WORKING → DROPPING → FIND_TARGET`) and include human-like randomization (Gaussian delays, break scheduling, Bezier mouse paths).
+Scripts include human-like randomization (Gaussian delays, break scheduling) and an antiban system configurable from the global settings panel.
 
 ---
 
-## Scripts included
+## Scripts
 
-| Script | Skill | Behaviour |
-|--------|-------|-----------|
-| Woodcutting | Woodcutting | Power-chop (drops logs, never banks) |
-| High Alchemy | Magic | Alches all non-rune items, 3-tick cooldown |
-| Gem Cutting | Crafting | Chisel+gem → Make-All production dialogue |
-| Fishing | Fishing | Power-fish (drops catch when full) |
-| Mining | Mining | Power-mine (drops ore when full) |
-| Cooking | Cooking | Use raw food on fire/range → Make-All |
-| Combat | Combat | Attack nearest target, eat below 50% HP |
-| Smithing | Smithing | Use bar on anvil → Make-All |
-| Fletching | Fletching | Auto-detects knife+log or stringing mode |
+| Script | Skill | Modes / Notable features |
+|--------|-------|--------------------------|
+| **Combat** | Combat | Target NPC by name, eat threshold, protective + offensive prayers, potion drinking, loot pickup, special attack, banking mode, sand crabs aggro reset, dwarf cannon (place/refill/GE restock), emergency logout |
+| **Woodcutting** | Woodcutting | Tree name filter, power-drop or banking, bird nest pickup, world hop on competition, skill progression (e.g. "1:Oak,30:Willow") |
+| **Mining** | Mining | Rock name filter, power-drop or banking, shift-drop, hop on competition, Motherlode Mine mode (veins, hopper, sack, broken strut repair), skill progression |
+| **Fishing** | Fishing | Configurable action (Lure/Bait/Net/Cage/Harpoon), power-fish or banking, shift-drop, skill progression |
+| **Cooking** | Cooking | Banking mode, fire/range detection, Make-All dialogue |
+| **High Alchemy** | Magic | Configurable item ID (0 = auto-detect), banking mode, nature rune tracking |
+| **Smithing** | Smithing | Standard anvil mode or Blast Furnace (conveyor belt, coal bag, bar dispenser), banking |
+| **Fletching** | Fletching | Auto-detects mode (knife+logs, string+bows, darts, bolts), banking |
+| **Crafting** | Crafting | Gem cutting with chisel, all uncut gem types, banking |
 
 ---
 
 ## Architecture
 
 ```
-BotEnginePlugin          ← RuneLite @PluginDescriptor, wires everything
+BotEnginePlugin              ← RuneLite @PluginDescriptor ("Axiom"), orange A toolbar icon
 │
-├── BotEnginePanel       ← Swing UI (script selector, Start/Pause/Stop)
-├── BotEngineConfig      ← RuneLite config (antiban settings, debug toggle)
-├── BotOverlay           ← In-game HUD (script name, state, runtime)
-├── DebugOverlay         ← Dev overlay (tile highlight, NPC boxes, position)
+├── ui/
+│   ├── AxiomPanel           ← PluginPanel: script list with icon badges, Configure & Start,
+│   │                           Stop/Pause/Resume, live status bar (polls every 500ms)
+│   ├── AxiomTheme           ← Colors (RuneLite ColorScheme), fonts, padding, icon colors
+│   ├── AxiomButton          ← Styled JButton (PRIMARY/SECONDARY/DANGER/NEUTRAL variants)
+│   ├── AxiomSectionPanel    ← Collapsible section panel with orange left-border accent
+│   ├── ScriptSettings       ← Abstract base; Gson save/load to ~/.runelite/axiom/<name>.json
+│   └── ScriptConfigDialog   ← Abstract JDialog (460×580, APPLICATION_MODAL); header badge,
+│                               scrollable sections, Save Profile + Start Script footer
 │
-├── ScriptRunner         ← @Subscribe GameTick → calls script.onLoop()
+├── BotEngineConfig          ← Global settings: antiban (break interval/duration, mouse jitter),
+│                               safety (emergency logout), debug overlay, GE restock
+│
+├── ScriptRunner             ← @Subscribe GameTick → calls script.onLoop() per tick
 │   └── manages STOPPED / RUNNING / PAUSED / BREAKING state
 │
-├── BotScript (abstract) ← Base class for all scripts
-│   ├── inject(...)      ← ScriptRunner injects api/ and util/ deps before onStart()
+├── BotScript (abstract)     ← Base class for all scripts
+│   ├── inject(...)          ← ScriptRunner injects api/ and util/ deps before onStart()
+│   ├── configure(config, settings)
+│   ├── createConfigDialog() ← Returns the script's XxxConfigDialog
 │   ├── onStart()
-│   ├── onLoop()         ← called every ~600ms while RUNNING
+│   ├── onLoop()             ← called every ~600ms while RUNNING
 │   └── onStop()
 │
-├── api/                 ← Game state + action wrappers
-│   ├── Players          ← local player location, animation, HP, combat
-│   ├── Npcs             ← find nearest/all by ID or name, filter dead
-│   ├── GameObjects      ← find nearest/all by ID or name
-│   ├── Inventory        ← contains, count, slots, getItems()
-│   ├── Bank             ← open, deposit, withdraw, close
-│   ├── Movement         ← walkTo, run toggle, energy
-│   ├── Interaction      ← all menuAction calls (click, use-on, drop)
-│   ├── Magic            ← High Alch, rune check
-│   └── Combat           ← attack, eat, prayers
+├── api/                     ← Game state + action wrappers (all inject Client internally)
+│   ├── Players              ← location, animation, HP%, isIdle, isInCombat, nearbyCount,
+│   │                           distanceTo, shouldEat
+│   ├── Npcs                 ← nearest by name / IDs / predicate
+│   ├── GameObjects          ← nearest by ID / predicate
+│   ├── Inventory            ← contains, isFull, isEmpty, getSlot, getItems, count
+│   ├── Bank                 ← isOpen, isNearBank, openNearest, depositAll, withdraw,
+│   │                           contains, close
+│   ├── Movement             ← walkTo, setRunning, distanceTo, logout
+│   ├── Interaction          ← click(NPC/GameObject/action), clickInventoryItem, useItemOn,
+│   │                           useItemOnItem, clickWidget, dropAll
+│   ├── Magic                ← canAlch, alch
+│   ├── Combat               ← attackNpc, eat, canSpec, activateSpec, isSpecActive, getSpecPercent
+│   ├── Camera               ← rotateTo
+│   ├── Prayers              ← isActive, activate, deactivate, deactivateAll,
+│   │                           shouldDrinkPotion, hasPotion, drinkPotion
+│   ├── GroundItems          ← nearestWithTile, exists
+│   └── GrandExchange        ← isOpen, openNearest, findEmptySlot, clickSlot, clickBuy,
+│                               clickSearchBox, clickFirstResult, setQuantity,
+│                               setPriceAboveGuide, confirmOffer, collectAll,
+│                               hasItemsToCollect, hasActiveOffer, isSearchOpen,
+│                               isOfferSetupOpen
 │
 └── util/
-    ├── Time             ← sleep, sleepUntil, tick math, formatElapsed
-    ├── Log              ← SLF4J wrapper with script-name prefix, varargs
-    └── Antiban          ← Gaussian delays, break scheduling, Bezier mouse paths
+    ├── Antiban              ← reactionDelay, randomDelay, shouldTakeBreak, startBreak,
+    │                           isBreakOver, reset
+    ├── Time                 ← sleep, randomSleep, ticksToMs
+    ├── Log                  ← info/warn/error/debug with script context prefix
+    ├── WorldHopper          ← hopToMembers, hopToWorld
+    └── Progression          ← level-gated target string (e.g. "1:Oak,30:Willow")
 ```
 
-### Key design decisions
+Each script lives under `scripts/<skillname>/` and consists of three files:
 
-**RuneLite Plugin API (not bytecode injection)**
-We hook into RuneLite's official plugin API. This is the safest, most maintainable approach. Scripts subscribe to `GameTick` events via the EventBus and read game state through the official `Client` object.
-
-**All interactions use `client.menuAction()`**
-Every action in OSRS (click tree, attack NPC, drop item, cast spell) is a menu entry. `client.menuAction(p0, p1, MenuAction, id, itemId, option, target)` is the single correct way to trigger any action in RuneLite 1.12.23.
-
-**Provider<Script> pattern for fresh instances**
-Scripts are created via Guice `Provider<ScriptClass>` in the panel — each Start press creates a new script instance with clean state, rather than reusing a potentially dirty one.
-
-**inject() not Guice inside scripts**
-Scripts can't use Guice directly (they're created fresh by Provider, outside the injector). Instead, `ScriptRunner` calls `script.inject(client, api..., util...)` before `onStart()`. All api/ and util/ objects are available as `protected` fields on `BotScript`.
+```
+XxxScript.java          ← extends BotScript, implements the loop logic
+XxxSettings.java        ← extends ScriptSettings, holds the config fields
+XxxConfigDialog.java    ← extends ScriptConfigDialog, builds the Swing UI
+```
 
 ---
 
@@ -87,44 +106,171 @@ Scripts can't use Guice directly (they're created fresh by Provider, outside the
 **Requirements:**
 - Java 11+
 - Maven 3.x
-- RuneLite 1.12.23 (fetched automatically from `repo.runelite.net`)
+- RuneLite built from source (tag `1.12.23` or `1.12.24-SNAPSHOT`)
 
 ```bash
-# Compile and run all tests
-mvn test
+# Build the fat JAR, skip tests
+mvn package -DskipTests
 
-# Build the fat JAR (output: target/bot-engine-osrs-1.0-SNAPSHOT.jar)
-mvn package
+# Output: target/bot-engine-osrs-1.0-SNAPSHOT.jar
+
+# Run all 285 unit tests
+mvn test
 ```
 
-All 285 unit tests should pass. Tests cover:
-- `util/` — Time math, Antiban delay bounds and break scheduling, Log formatting
-- `api/` — Inventory slot/count logic, Interaction menuAction argument verification
-- `script/` — ScriptRunner state machine, GameTick dispatch, error handling, break cycle
-- `scripts/` — Woodcutting/Alchemy/Combat state machine transitions
+Tests cover: ScriptRunner state machine, GameTick dispatch, error handling, break cycle, Woodcutting/Alchemy/Combat state machine transitions, Inventory logic, Antiban delay bounds, Log formatting, Time math, Progression level-gating.
 
 ---
 
-## Loading into RuneLite (for testing)
+## Deploying and running
 
-See [docs/testing-guide.md](docs/testing-guide.md) for the step-by-step process.
+### One-time setup: Jagex credentials on disk
 
-Short version: RuneLite's developer mode lets you load external plugin JARs via `--developer-mode` and the Plugin Hub's "Load from file" option. You need RuneLite built from source (tag `1.12.23`).
+The source-built client needs credentials from your Jagex account. Do this once:
+
+1. Set the `RUNELITE_ARGS` environment variable:
+   ```powershell
+   [System.Environment]::SetEnvironmentVariable('RUNELITE_ARGS', '--insecure-write-credentials', 'User')
+   ```
+2. Restart the Jagex Launcher fully (close from system tray), then launch OSRS normally. RuneLite writes your session to `~/.runelite/credentials.properties`.
+3. Verify: `cat "$HOME/.runelite/credentials.properties"` — should show `JX_SESSION_ID`, `JX_CHARACTER_ID`, `JX_DISPLAY_NAME`.
+
+Re-run step 2 whenever the session expires.
+
+### Deploy the plugin
+
+```bash
+cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
+```
+
+### Launch RuneLite with developer mode
+
+```bash
+java -ea -jar "C:\Users\dmart\Documents\Personal\Github\runelite\runelite-client\build\libs\client-1.12.24-SNAPSHOT-shaded.jar" --developer-mode
+```
+
+The log should show:
+```
+Side-loading plugin ...bot-engine-osrs-1.0-SNAPSHOT.jar
+Bot Engine ready
+```
+
+### After code changes
+
+```bash
+mvn clean package -DskipTests
+cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
+# Full close + re-run the java command above
+```
 
 ---
 
-## Configuration
+## Using the panel
 
-Once loaded, the plugin adds a "Bot Engine" section in RuneLite's plugin config panel:
+1. Click the orange **A** icon in the RuneLite toolbar to open the Axiom panel.
+2. Click a script in the list to select it.
+3. Click **Configure & Start** — the script's config dialog opens.
+4. Fill in the settings (target, thresholds, modes). Click **Save Profile** to persist them.
+5. Click **Start Script** — the dialog closes and the script starts.
+6. Use **Pause/Resume** and **Stop** in the panel to control the running script.
+
+The status bar at the bottom of the panel polls every 500ms and shows the current state (RUNNING / PAUSED / BREAKING / STOPPED) and elapsed runtime.
+
+---
+
+## Global configuration (BotEngineConfig)
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | Break every (minutes) | 45 | Average time between antiban breaks |
 | Break duration (minutes) | 7 | Average break length |
-| Mouse jitter radius (px) | 3 | Random pixel offset on clicks |
-| Enable antiban | true | Toggle all break/delay randomization |
-| Show debug overlay | false | Tile highlights, NPC boxes, state info |
-| Verbose logging | false | DEBUG level output in RuneLite console |
+| Mouse jitter radius (px) | 3 | Gaussian offset added to click coordinates |
+| Emergency logout | disabled | Log out immediately on low HP / unexpected state |
+| Show debug overlay | false | Tile highlights, NPC boxes, player position, script state |
+| GE restock enabled | false | Allow scripts to buy supplies from Grand Exchange |
+| GE restock threshold | 50 | Quantity below which restocking triggers |
+| GE restock quantity | 500 | How many to buy when restocking |
+
+---
+
+## Adding a new script
+
+1. Create a package under `src/main/java/com/botengine/osrs/scripts/myskill/`.
+
+2. **Settings** — extend `ScriptSettings`:
+   ```java
+   public class MySettings extends ScriptSettings {
+       public String targetName = "Goblin";
+       public int eatThreshold = 50;
+   
+       @Override
+       public String getScriptName() { return "myscript"; }
+   }
+   ```
+
+3. **Config dialog** — extend `ScriptConfigDialog`:
+   ```java
+   public class MyConfigDialog extends ScriptConfigDialog {
+       private final MySettings settings;
+   
+       public MyConfigDialog(MySettings settings) {
+           super("My Script", "M", new Color(0x4CAF50));
+           this.settings = settings;
+           buildSections();
+       }
+   
+       @Override
+       protected void buildSections() {
+           AxiomSectionPanel section = new AxiomSectionPanel("Targets");
+           section.addRow("Target NPC", targetField);
+           addSection(section);
+       }
+   
+       @Override
+       protected void saveToSettings() { settings.targetName = targetField.getText(); }
+   
+       @Override
+       protected void loadFromSettings() { targetField.setText(settings.targetName); }
+   }
+   ```
+
+4. **Script** — extend `BotScript`:
+   ```java
+   public class MyScript extends BotScript {
+   
+       private MySettings settings;
+   
+       @Override
+       public void configure(BotEngineConfig config, ScriptSettings s) {
+           this.settings = (MySettings) s;
+       }
+   
+       @Override
+       public ScriptConfigDialog createConfigDialog() {
+           return new MyConfigDialog((MySettings) getSettings());
+       }
+   
+       @Override
+       public void onStart() { log.info("Starting My Script"); }
+   
+       @Override
+       public void onLoop() {
+           // Called every ~600ms. Do one action and return.
+           // Protected fields available: players, npcs, gameObjects, inventory,
+           // bank, movement, interaction, magic, combat, camera, prayers,
+           // groundItems, grandExchange, antiban, time, log, worldHopper
+           if (players.isIdle()) {
+               NPC target = npcs.nearest(settings.targetName);
+               if (target != null) combat.attackNpc(target);
+           }
+       }
+   
+       @Override
+       public void onStop() { log.info("Stopped"); }
+   }
+   ```
+
+5. Register it in `AxiomPanel` — add a `Provider<MyScript>` constructor parameter and add it to the scripts list.
 
 ---
 
@@ -135,79 +281,70 @@ src/
 ├── main/java/com/botengine/osrs/
 │   ├── BotEnginePlugin.java
 │   ├── BotEngineConfig.java
-│   ├── BotEnginePanel.java
-│   ├── api/
-│   ├── overlay/
 │   ├── script/
-│   ├── scripts/
-│   │   ├── alchemy/
-│   │   ├── combat/
-│   │   ├── cooking/
-│   │   ├── crafting/
-│   │   ├── fishing/
-│   │   ├── fletching/
-│   │   ├── mining/
-│   │   ├── smithing/
-│   │   └── woodcutting/
-│   └── util/
+│   │   ├── BotScript.java
+│   │   ├── ScriptRunner.java
+│   │   └── ScriptState.java
+│   ├── ui/
+│   │   ├── AxiomPanel.java
+│   │   ├── AxiomTheme.java
+│   │   ├── AxiomButton.java
+│   │   ├── AxiomSectionPanel.java
+│   │   ├── ScriptSettings.java
+│   │   └── ScriptConfigDialog.java
+│   ├── api/
+│   │   ├── Players.java
+│   │   ├── Npcs.java
+│   │   ├── GameObjects.java
+│   │   ├── Inventory.java
+│   │   ├── Bank.java
+│   │   ├── Movement.java
+│   │   ├── Interaction.java
+│   │   ├── Magic.java
+│   │   ├── Combat.java
+│   │   ├── Camera.java
+│   │   ├── Prayers.java
+│   │   ├── GroundItems.java
+│   │   └── GrandExchange.java
+│   ├── util/
+│   │   ├── Antiban.java
+│   │   ├── Time.java
+│   │   ├── Log.java
+│   │   ├── WorldHopper.java
+│   │   └── Progression.java
+│   └── scripts/
+│       ├── combat/       (CombatScript, CombatSettings, CombatConfigDialog)
+│       ├── woodcutting/  (WoodcuttingScript, WoodcuttingSettings, WoodcuttingConfigDialog)
+│       ├── mining/       (MiningScript, MiningSettings, MiningConfigDialog)
+│       ├── fishing/      (FishingScript, FishingSettings, FishingConfigDialog)
+│       ├── cooking/      (CookingScript, CookingSettings, CookingConfigDialog)
+│       ├── alchemy/      (AlchemyScript, AlchemySettings, AlchemyConfigDialog)
+│       ├── smithing/     (SmithingScript, SmithingSettings, SmithingConfigDialog)
+│       ├── fletching/    (FletchingScript, FletchingSettings, FletchingConfigDialog)
+│       └── crafting/     (CraftingScript, CraftingSettings, CraftingConfigDialog)
 └── test/java/com/botengine/osrs/
-    ├── api/
-    ├── script/
-    ├── scripts/
-    └── util/
+    ├── script/           (ScriptRunnerTest)
+    ├── scripts/          (CombatScriptTest, WoodcuttingScriptTest, AlchemyScriptTest)
+    └── util/             (AntibanTest, LogTest, TimeTest, ProgressionTest)
 ```
 
 ---
 
-## Writing a new script
+## Docs
 
-```java
-package com.botengine.osrs.scripts.myskill;
-
-import com.botengine.osrs.script.BotScript;
-import javax.inject.Inject;
-
-public class MyScript extends BotScript {
-
-    @Inject
-    public MyScript() {}
-
-    @Override
-    public String getName() { return "My Skill"; }
-
-    @Override
-    public void onStart() {
-        log.info("Starting");
-    }
-
-    @Override
-    public void onLoop() {
-        // Called every ~600ms while running.
-        // Use api/ fields: players, npcs, gameObjects, inventory, interaction, etc.
-        // Use util/ fields: log, time, antiban
-
-        if (players.isIdle()) {
-            // do something
-        }
-    }
-
-    @Override
-    public void onStop() {
-        log.info("Stopped");
-    }
-}
-```
-
-Then register it in `BotEnginePanel` constructor with a `Provider<MyScript>` parameter and add it to the `scripts` map.
+- [docs/architecture.md](docs/architecture.md) — deep dive: game tick loop, `client.menuAction()` parameter reference, state machine pattern, DI model, widget IDs
+- [docs/testing-guide.md](docs/testing-guide.md) — step-by-step: credentials setup, deploy, launch, per-script test cases, common issues
+- [docs/packaging.md](docs/packaging.md) — plan for packaging Axiom as a Windows .exe installer
+- [docs/production-gaps.md](docs/production-gaps.md) — missing features vs TriBot/DreamBot/RuneMate
 
 ---
 
 ## Learning goals
 
-This project covers:
-- RuneLite's plugin lifecycle (`startUp`, `shutDown`, EventBus, Guice DI)
+- RuneLite plugin lifecycle (`startUp`, `shutDown`, EventBus, Guice DI)
 - Game tick architecture and event-driven scripting
 - State machine pattern for automation loops
-- Human-like randomization (Gaussian distributions, Bezier curves)
-- RuneLite's menu action system (how every game interaction works)
+- Human-like randomization (Gaussian distributions, break scheduling)
+- RuneLite's menu action system (how every game interaction works internally)
+- Custom Swing UI panels within a RuneLite plugin
 - Writing testable Java with JUnit 5 + Mockito against a provided-scope library

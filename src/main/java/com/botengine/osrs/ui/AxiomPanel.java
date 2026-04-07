@@ -12,6 +12,7 @@ import com.botengine.osrs.scripts.fletching.FletchingScript;
 import com.botengine.osrs.scripts.mining.MiningScript;
 import com.botengine.osrs.scripts.smithing.SmithingScript;
 import com.botengine.osrs.scripts.woodcutting.WoodcuttingScript;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.ui.PluginPanel;
 
 import javax.inject.Inject;
@@ -53,6 +54,7 @@ import java.util.List;
 public class AxiomPanel extends PluginPanel
 {
     private final ScriptRunner runner;
+    private final ClientThread clientThread;
     private final List<BotScript> scripts;
 
     // ── Status bar widgets (updated by timer) ─────────────────────────────────
@@ -72,6 +74,7 @@ public class AxiomPanel extends PluginPanel
     @Inject
     public AxiomPanel(
         ScriptRunner runner,
+        ClientThread clientThread,
         CombatScript    combat,
         WoodcuttingScript woodcutting,
         MiningScript    mining,
@@ -84,7 +87,8 @@ public class AxiomPanel extends PluginPanel
     )
     {
         super(false); // false = no default wrapping scroll pane
-        this.runner  = runner;
+        this.runner       = runner;
+        this.clientThread = clientThread;
         this.scripts = Arrays.asList(
             combat, woodcutting, mining, fishing, cooking,
             alchemy, smithing, fletching, crafting
@@ -208,19 +212,17 @@ public class AxiomPanel extends PluginPanel
         });
         row.add(configBtn, BorderLayout.EAST);
 
-        // Row selection on click anywhere
+        // Row selection on click — hover highlight only changes the row bg, not children
         row.addMouseListener(new MouseAdapter()
         {
-            @Override public void mouseClicked(MouseEvent e)  { selectScript(script, row); }
+            @Override public void mouseClicked(MouseEvent e) { selectScript(script, row); }
             @Override public void mouseEntered(MouseEvent e)
             {
-                if (selectedScript != script)
-                    row.setBackground(new Color(45, 45, 45));
+                if (selectedScript != script) row.setBackground(new Color(45, 45, 45));
             }
             @Override public void mouseExited(MouseEvent e)
             {
-                if (selectedScript != script)
-                    row.setBackground(AxiomTheme.BG_PANEL);
+                if (selectedScript != script) row.setBackground(AxiomTheme.BG_PANEL);
             }
         });
 
@@ -313,12 +315,12 @@ public class AxiomPanel extends PluginPanel
 
     private void selectScript(BotScript script, JPanel row)
     {
-        // Deselect previous
+        // Deselect previous — only change the row panel itself, not its children.
+        // Children (JLabel, etc.) are non-opaque and inherit from parent; the icon
+        // badge is opaque with its own script-specific color and must not be touched.
         if (selectedRow != null)
         {
             selectedRow.setBackground(AxiomTheme.BG_PANEL);
-            for (java.awt.Component c : selectedRow.getComponents())
-                c.setBackground(AxiomTheme.BG_PANEL);
         }
 
         selectedScript = script;
@@ -327,11 +329,8 @@ public class AxiomPanel extends PluginPanel
         if (row != null)
         {
             row.setBackground(AxiomTheme.BG_SELECTED);
-            for (java.awt.Component c : row.getComponents())
-                c.setBackground(AxiomTheme.BG_SELECTED);
         }
 
-        // Update button label to selected script name
         if (script != null && btnConfigStart != null)
         {
             btnConfigStart.setText("▶  Configure " + script.getName());
@@ -350,7 +349,9 @@ public class AxiomPanel extends PluginPanel
         if (confirmed)
         {
             ScriptSettings settings = dialog.getSettings();
-            runner.start(script, settings);
+            // runner.start() calls onStart() which touches client APIs —
+            // must run on the RuneLite client thread, not the Swing EDT.
+            clientThread.invokeLater(() -> runner.start(script, settings));
         }
     }
 

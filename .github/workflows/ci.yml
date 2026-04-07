@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run tests
+        run: mvn test --no-transfer-progress
+
+      - name: Build JAR (no tests)
+        run: mvn package -DskipTests --no-transfer-progress
+
+      - name: Upload dev JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: axiom-dev-${{ github.sha }}
+          path: target/bot-engine-osrs-*.jar
+          retention-days: 7

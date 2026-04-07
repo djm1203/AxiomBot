@@ -272,6 +272,7 @@ class ScriptRunnerTest
             public void onStart()    {}
             public void onLoop()     {}
             public void onStop()     {}
+            public com.botengine.osrs.ui.ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent p) { return null; }
         };
     }
 
@@ -283,6 +284,7 @@ class ScriptRunnerTest
             public void onStart()    {}
             public void onLoop()     { throw ex; }
             public void onStop()     {}
+            public com.botengine.osrs.ui.ScriptConfigDialog<?> createConfigDialog(javax.swing.JComponent p) { return null; }
         };
     }
 }
