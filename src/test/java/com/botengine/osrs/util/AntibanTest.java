@@ -77,12 +77,12 @@ class AntibanTest
     }
 
     @RepeatedTest(20)
-    void reactionDelay_staysBelow2xMean()
+    void reactionDelay_staysBelowDistributionMax()
     {
-        // mean=150ms, clamp max=2.0x → never exceeds 300ms
+        // triangularDelay(80, 160, 400) — hard upper bound is 400ms
         long result = antiban.reactionDelay();
-        assertTrue(result <= 300,
-            "reactionDelay=" + result + " exceeded 300ms (2x mean of 150ms)");
+        assertTrue(result <= 400,
+            "reactionDelay=" + result + " exceeded 400ms (distribution max)");
     }
 
     // ── mouseJitter ───────────────────────────────────────────────────────────

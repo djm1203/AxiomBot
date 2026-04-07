@@ -2,6 +2,9 @@ package com.botengine.osrs.api;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.InventoryID;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.MenuAction;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.WidgetUtil;
@@ -106,7 +109,7 @@ public class Magic
     /**
      * Returns true if the player can cast High Level Alchemy:
      *   - at least 1 Nature rune
-     *   - at least 5 Fire runes OR a fire staff in inventory
+     *   - at least 5 Fire runes OR a fire staff in inventory OR a fire staff equipped
      */
     public boolean canAlch()
     {
@@ -115,6 +118,22 @@ public class Magic
         for (int staffId : FIRE_STAFF_IDS)
         {
             if (inventory.contains(staffId)) return true;
+        }
+        return hasFireStaffEquipped();
+    }
+
+    /** Returns true if any equipped item is a fire-providing staff. */
+    private boolean hasFireStaffEquipped()
+    {
+        ItemContainer equip = client.getItemContainer(InventoryID.EQUIPMENT);
+        if (equip == null) return false;
+        for (Item item : equip.getItems())
+        {
+            if (item == null) continue;
+            for (int staffId : FIRE_STAFF_IDS)
+            {
+                if (item.getId() == staffId) return true;
+            }
         }
         return false;
     }

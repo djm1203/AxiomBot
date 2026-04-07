@@ -129,6 +129,10 @@ public final class AxiomTheme
             case "fletching":     return new Color(50,  160, 140);
             case "crafting":
             case "gem cutting":   return new Color(190, 80,  120);
+            case "firemaking":    return new Color(220, 80,  20);
+            case "agility":       return new Color(60,  180, 80);
+            case "thieving":      return new Color(100, 60,  160);
+            case "herblore":      return new Color(60,  160, 60);
             default:              return BTN_SECONDARY;
         }
     }
@@ -152,6 +156,10 @@ public final class AxiomTheme
             case "fletching":     return "FL";
             case "crafting":
             case "gem cutting":   return "CR";
+            case "firemaking":    return "FM";
+            case "agility":       return "AG";
+            case "thieving":      return "TH";
+            case "herblore":      return "HB";
             default:            return scriptName.substring(0, Math.min(2, scriptName.length())).toUpperCase();
         }
     }

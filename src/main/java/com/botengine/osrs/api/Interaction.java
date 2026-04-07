@@ -47,16 +47,14 @@ public class Interaction
     // ── GameObjects ───────────────────────────────────────────────────────────
 
     /**
-     * Interacts with a GameObject using the first menu option (left-click action).
+     * Interacts with a GameObject using the correct menu option for the given action.
      *
-     * Scene coordinates from getSceneMinLocation() tell the client which tile
-     * the object is on. The object's name is resolved from its definition.
-     *
-     * TODO: Support non-first options by mapping action string to
-     *       GAME_OBJECT_SECOND/THIRD/FOURTH/FIFTH_OPTION.
+     * Resolves which option slot (1st–5th) the action occupies by looking up the
+     * object's definition. Falls back to FIRST_OPTION if the action is not found,
+     * preserving existing behaviour for all current callers.
      *
      * @param obj    the game object to interact with
-     * @param action the option text (e.g. "Chop down", "Mine", "Open", "Bank")
+     * @param action the option text (e.g. "Chop down", "Mine", "Steal-from", "Climb")
      */
     public void click(GameObject obj, String action)
     {
@@ -66,17 +64,40 @@ public class Interaction
         int sceneX = obj.getSceneMinLocation().getX();
         int sceneY = obj.getSceneMinLocation().getY();
 
-        log.debug("click(GameObject) id={} name='{}' action='{}' scene=({},{})",
-            obj.getId(), name, action, sceneX, sceneY);
+        MenuAction menuAction = resolveObjectAction(def, action);
 
-        client.menuAction(
-            sceneX, sceneY,
-            MenuAction.GAME_OBJECT_FIRST_OPTION,
-            obj.getId(),
-            -1,
-            action,
-            name
-        );
+        log.debug("click(GameObject) id={} name='{}' action='{}' menuAction={} scene=({},{})",
+            obj.getId(), name, action, menuAction, sceneX, sceneY);
+
+        client.menuAction(sceneX, sceneY, menuAction, obj.getId(), -1, action, name);
+    }
+
+    /**
+     * Resolves the MenuAction for a given action string on a GameObject.
+     * Maps the action's position in ObjectComposition.getActions() to the
+     * corresponding GAME_OBJECT_*_OPTION constant.
+     */
+    private MenuAction resolveObjectAction(net.runelite.api.ObjectComposition def, String action)
+    {
+        if (def != null && def.getActions() != null)
+        {
+            String[] actions = def.getActions();
+            for (int i = 0; i < actions.length; i++)
+            {
+                if (actions[i] != null && actions[i].equalsIgnoreCase(action))
+                {
+                    switch (i)
+                    {
+                        case 0: return MenuAction.GAME_OBJECT_FIRST_OPTION;
+                        case 1: return MenuAction.GAME_OBJECT_SECOND_OPTION;
+                        case 2: return MenuAction.GAME_OBJECT_THIRD_OPTION;
+                        case 3: return MenuAction.GAME_OBJECT_FOURTH_OPTION;
+                        case 4: return MenuAction.GAME_OBJECT_FIFTH_OPTION;
+                    }
+                }
+            }
+        }
+        return MenuAction.GAME_OBJECT_FIRST_OPTION;
     }
 
     // ── NPCs ──────────────────────────────────────────────────────────────────
@@ -182,13 +203,28 @@ public class Interaction
     // ── Inventory items ───────────────────────────────────────────────────────
 
     /**
-     * Clicks an inventory item by item ID (e.g. "Drop", "Eat", "Wield").
-     * Finds the first slot containing the item and fires CC_OP.
+     * Clicks an inventory item by item ID using the Drop action (op=7).
+     * Convenience wrapper for the common drop/eat/wield case.
      *
      * @param itemId the item to click
-     * @param action the option text (e.g. "Drop", "Eat")
+     * @param action the option text (e.g. "Drop", "Eat", "Wield")
      */
     public void clickInventoryItem(int itemId, String action)
+    {
+        clickInventoryItem(itemId, action, 7);
+    }
+
+    /**
+     * Clicks an inventory item by item ID with an explicit CC_OP slot.
+     *
+     * Use this when the desired action is not op=7 (Drop).
+     * For example, "Clean" on a grimy herb is op=1 (left-click).
+     *
+     * @param itemId the item to click
+     * @param action the option text
+     * @param op     the CC_OP slot (1=left-click, 2=second option, ..., 7=drop)
+     */
+    public void clickInventoryItem(int itemId, String action, int op)
     {
         net.runelite.api.ItemContainer inv =
             client.getItemContainer(net.runelite.api.InventoryID.INVENTORY);
@@ -199,11 +235,11 @@ public class Interaction
         {
             if (items[slot] != null && items[slot].getId() == itemId)
             {
-                log.debug("clickInventoryItem id={} slot={} action='{}'", itemId, slot, action);
+                log.debug("clickInventoryItem id={} slot={} action='{}' op={}", itemId, slot, action, op);
                 client.menuAction(
                     slot, net.runelite.api.widgets.WidgetInfo.INVENTORY.getId(),
                     MenuAction.CC_OP,
-                    7,   // slot 7 = "Drop" in default inventory context menu
+                    op,
                     itemId,
                     action,
                     ""

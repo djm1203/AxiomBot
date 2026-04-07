@@ -1,11 +1,14 @@
 package com.botengine.osrs.util;
 
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Point;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import java.awt.geom.Point2D;
+import java.awt.AWTException;
+import java.awt.Robot;
+import java.awt.event.KeyEvent;
 import java.util.Random;
 
 /**
@@ -24,10 +27,24 @@ import java.util.Random;
  * All timing values have randomness built in so patterns are never identical
  * across sessions.
  */
+@Slf4j
 @Singleton
 public class Antiban
 {
     private static final Random random = new Random();
+
+    // F-key VK codes for the OSRS skill/inventory tabs
+    private static final int[] TAB_KEYS = {
+        KeyEvent.VK_F1, KeyEvent.VK_F2, KeyEvent.VK_F3,
+        KeyEvent.VK_F5, KeyEvent.VK_F6  // skip F4 (inventory — we return to it)
+    };
+
+    private Robot robot;
+
+    {
+        try { robot = new Robot(); }
+        catch (AWTException e) { log.warn("Antiban: Robot unavailable — camera/tab actions disabled"); }
+    }
 
     /** Per-run random seed in range [0.85, 1.15] — varies timing slightly between sessions. */
     private final double accountSeed = 0.85 + Math.random() * 0.30;
@@ -166,14 +183,37 @@ public class Antiban
     }
 
     /**
-     * Returns a random reaction time delay simulating human perception latency.
-     * Sampled from a realistic range of 80–220ms with Gaussian distribution.
-     * Applies both account seed and fatigue factor for realistic variation.
+     * Returns a reaction time delay using a triangular distribution.
+     *
+     * Triangular distribution matches human reaction time data better than
+     * Gaussian — it has a clear minimum (can't react instantly), a most-likely
+     * response time, and a long tail for slow responses.
+     *
+     * Default range: 80ms min, 160ms mode, 400ms max (ABC2-spec inspired).
+     * Fatigue and account seed shift the distribution slightly each session.
      */
     public long reactionDelay()
     {
         double multiplier = accountSeed * fatigueFactor();
-        return (long) (gaussianDelay(150, 40) * multiplier);
+        return (long) (triangularDelay(80, 160, 400) * multiplier);
+    }
+
+    /**
+     * Triangular distribution delay — more ABC2-accurate than Gaussian.
+     *
+     * @param min  minimum possible delay (ms)
+     * @param mode most likely delay (ms) — peak of the triangle
+     * @param max  maximum possible delay (ms)
+     */
+    public long triangularDelay(long min, long mode, long max)
+    {
+        if (min >= max) return min;
+        double u = random.nextDouble();
+        double f = (double) (mode - min) / (max - min);
+        if (u < f)
+            return min + (long) Math.sqrt(u * (max - min) * (mode - min));
+        else
+            return max - (long) Math.sqrt((1.0 - u) * (max - min) * (max - mode));
     }
 
     /** Returns this session's account seed (range 0.85–1.15). */
@@ -248,6 +288,74 @@ public class Antiban
     public long getBreakEndMs()
     {
         return breakEndMs;
+    }
+
+    // ── Idle action triggers ──────────────────────────────────────────────────
+
+    /**
+     * Returns true with the given probability. Use to gate optional idle actions.
+     * Example: if (antiban.shouldIdleAction(0.05)) antiban.performCameraJitter();
+     *
+     * @param chance probability in range [0.0, 1.0]
+     */
+    public boolean shouldIdleAction(double chance)
+    {
+        return random.nextDouble() < chance;
+    }
+
+    /**
+     * Taps the left or right arrow key briefly to simulate a small camera
+     * rotation, as a real player would occasionally adjust their view.
+     *
+     * Duration is randomized between 50–200ms to produce varied rotation amounts.
+     * Does nothing if Robot is unavailable.
+     */
+    public void performCameraJitter()
+    {
+        if (robot == null) return;
+        int key = random.nextBoolean() ? KeyEvent.VK_LEFT : KeyEvent.VK_RIGHT;
+        long holdMs = randomDelay(50, 200);
+        try
+        {
+            robot.keyPress(key);
+            Thread.sleep(holdMs);
+            robot.keyRelease(key);
+            log.debug("Antiban: camera jitter (key={} hold={}ms)", key == KeyEvent.VK_LEFT ? "LEFT" : "RIGHT", holdMs);
+        }
+        catch (InterruptedException e)
+        {
+            Thread.currentThread().interrupt();
+            robot.keyRelease(key);
+        }
+    }
+
+    /**
+     * Briefly switches to a random non-inventory tab (Skills, Quest, etc.)
+     * then returns to the Inventory tab (F4), simulating a player glancing
+     * at their stats or quest log between actions.
+     *
+     * Does nothing if Robot is unavailable.
+     */
+    public void performTabGlance()
+    {
+        if (robot == null) return;
+        int tabKey = TAB_KEYS[random.nextInt(TAB_KEYS.length)];
+        long glanceMs = randomDelay(200, 600);
+        try
+        {
+            robot.keyPress(tabKey);
+            robot.keyRelease(tabKey);
+            Thread.sleep(glanceMs);
+            robot.keyPress(KeyEvent.VK_F4);
+            robot.keyRelease(KeyEvent.VK_F4);
+            log.debug("Antiban: tab glance (tab=F{} duration={}ms)", tabKey - KeyEvent.VK_F1 + 1, glanceMs);
+        }
+        catch (InterruptedException e)
+        {
+            Thread.currentThread().interrupt();
+            robot.keyPress(KeyEvent.VK_F4);
+            robot.keyRelease(KeyEvent.VK_F4);
+        }
     }
 
     private static int clamp(int value, int min, int max)

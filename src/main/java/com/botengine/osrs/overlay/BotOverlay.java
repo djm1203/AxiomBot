@@ -4,7 +4,9 @@ import com.botengine.osrs.script.BotScript;
 import com.botengine.osrs.script.ScriptRunner;
 import com.botengine.osrs.script.ScriptState;
 import com.botengine.osrs.util.Antiban;
+import com.botengine.osrs.util.SessionStats;
 import com.botengine.osrs.util.Time;
+import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -37,17 +39,22 @@ public class BotOverlay extends Overlay
     private static final Color COLOR_LABEL   = Color.WHITE;
 
     private final ScriptRunner scriptRunner;
-    private final Antiban antiban;
-    private final Time time;
+    private final Antiban      antiban;
+    private final Time         time;
+    private final SessionStats sessionStats;
+    private final Client       client;
 
     private long scriptStartTime = 0;
 
     @Inject
-    public BotOverlay(ScriptRunner scriptRunner, Antiban antiban, Time time)
+    public BotOverlay(ScriptRunner scriptRunner, Antiban antiban, Time time,
+                      SessionStats sessionStats, Client client)
     {
         this.scriptRunner = scriptRunner;
-        this.antiban = antiban;
-        this.time = time;
+        this.antiban      = antiban;
+        this.time         = time;
+        this.sessionStats = sessionStats;
+        this.client       = client;
 
         setPosition(OverlayPosition.TOP_LEFT);
         setLayer(OverlayLayer.ABOVE_SCENE);
@@ -97,6 +104,33 @@ public class BotOverlay extends Overlay
             .right(time.formatElapsed(scriptStartTime))
             .rightColor(Color.WHITE)
             .build());
+
+        // XP/hr row — sample stats and show if there's data
+        sessionStats.sample(client);
+        int xpHr = sessionStats.getXpPerHour();
+        if (xpHr > 0 && sessionStats.getTopSkill() != null)
+        {
+            String skillName = sessionStats.getTopSkill().getName();
+            // Format: "75,420" style with comma separator
+            String xpHrStr = String.format("%,d", xpHr);
+            panel.getChildren().add(LineComponent.builder()
+                .left(skillName + " XP/hr")
+                .leftColor(COLOR_LABEL)
+                .right(xpHrStr)
+                .rightColor(Color.YELLOW)
+                .build());
+
+            int levels = sessionStats.getTopLevelsGained();
+            if (levels > 0)
+            {
+                panel.getChildren().add(LineComponent.builder()
+                    .left("Levels gained")
+                    .leftColor(COLOR_LABEL)
+                    .right("+" + levels)
+                    .rightColor(COLOR_RUNNING)
+                    .build());
+            }
+        }
 
         // Break info row
         if (state == ScriptState.BREAKING)

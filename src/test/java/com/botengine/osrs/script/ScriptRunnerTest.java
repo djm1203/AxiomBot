@@ -7,6 +7,7 @@ import com.botengine.osrs.util.Antiban;
 import com.botengine.osrs.api.Prayers;
 import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.util.Log;
+import com.botengine.osrs.util.SessionStats;
 import com.botengine.osrs.util.Time;
 import com.botengine.osrs.util.WorldHopper;
 import net.runelite.api.Client;
@@ -50,6 +51,7 @@ class ScriptRunnerTest
     @Mock private Antiban antiban;
     @Mock private Time time;
     @Mock private Log botLog;
+    @Mock private SessionStats sessionStats;
     @Mock private BotEngineConfig config;
 
     private ScriptRunner runner;
@@ -61,7 +63,7 @@ class ScriptRunnerTest
         runner = new ScriptRunner(
             client, players, npcs, gameObjects, inventory,
             bank, movement, interaction, magic, combat, camera,
-            prayers, groundItems, worldHopper, grandExchange, antiban, time, botLog, config
+            prayers, groundItems, worldHopper, grandExchange, antiban, time, botLog, sessionStats, config
         );
         tick = new GameTick();
         // Default: no break pending, no break over

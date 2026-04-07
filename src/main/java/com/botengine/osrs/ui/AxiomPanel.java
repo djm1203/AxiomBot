@@ -3,14 +3,18 @@ package com.botengine.osrs.ui;
 import com.botengine.osrs.script.BotScript;
 import com.botengine.osrs.script.ScriptRunner;
 import com.botengine.osrs.script.ScriptState;
+import com.botengine.osrs.scripts.agility.AgilityScript;
 import com.botengine.osrs.scripts.alchemy.AlchemyScript;
 import com.botengine.osrs.scripts.combat.CombatScript;
 import com.botengine.osrs.scripts.cooking.CookingScript;
 import com.botengine.osrs.scripts.crafting.CraftingScript;
+import com.botengine.osrs.scripts.firemaking.FiremakingScript;
 import com.botengine.osrs.scripts.fishing.FishingScript;
 import com.botengine.osrs.scripts.fletching.FletchingScript;
+import com.botengine.osrs.scripts.herblore.HerbloreScript;
 import com.botengine.osrs.scripts.mining.MiningScript;
 import com.botengine.osrs.scripts.smithing.SmithingScript;
+import com.botengine.osrs.scripts.thieving.ThievingScript;
 import com.botengine.osrs.scripts.woodcutting.WoodcuttingScript;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.ui.PluginPanel;
@@ -22,8 +26,10 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 import java.awt.BorderLayout;
@@ -55,7 +61,7 @@ public class AxiomPanel extends PluginPanel
 {
     private final ScriptRunner runner;
     private final ClientThread clientThread;
-    private final List<BotScript> scripts;
+    private final List<BotScript> scripts; // all scripts (F2P + P2P combined)
 
     // ── Status bar widgets (updated by timer) ─────────────────────────────────
     private JLabel statusDot;
@@ -71,38 +77,58 @@ public class AxiomPanel extends PluginPanel
     private BotScript selectedScript;
     private JPanel    selectedRow;
 
+    private final List<BotScript> f2pScripts;
+    private final List<BotScript> p2pScripts;
+
     @Inject
     public AxiomPanel(
         ScriptRunner runner,
         ClientThread clientThread,
-        CombatScript    combat,
+        CombatScript      combat,
         WoodcuttingScript woodcutting,
-        MiningScript    mining,
-        FishingScript   fishing,
-        CookingScript   cooking,
-        AlchemyScript   alchemy,
-        SmithingScript  smithing,
-        FletchingScript fletching,
-        CraftingScript  crafting
+        MiningScript      mining,
+        FishingScript     fishing,
+        CookingScript     cooking,
+        AlchemyScript     alchemy,
+        SmithingScript    smithing,
+        CraftingScript    crafting,
+        FiremakingScript  firemaking,
+        FletchingScript   fletching,
+        AgilityScript     agility,
+        ThievingScript    thieving,
+        HerbloreScript    herblore
     )
     {
         super(false); // false = no default wrapping scroll pane
         this.runner       = runner;
         this.clientThread = clientThread;
-        this.scripts = Arrays.asList(
+        this.f2pScripts   = Arrays.asList(
             combat, woodcutting, mining, fishing, cooking,
-            alchemy, smithing, fletching, crafting
+            alchemy, smithing, crafting, firemaking
         );
+        this.p2pScripts   = Arrays.asList(
+            fletching, agility, thieving, herblore
+        );
+        this.scripts = new java.util.ArrayList<>();
+        this.scripts.addAll(f2pScripts);
+        this.scripts.addAll(p2pScripts);
+
+        // Style tab headers to match dark theme
+        UIManager.put("TabbedPane.selected",         AxiomTheme.BG_CARD);
+        UIManager.put("TabbedPane.background",        AxiomTheme.BG_DEEP);
+        UIManager.put("TabbedPane.foreground",        AxiomTheme.TEXT);
+        UIManager.put("TabbedPane.contentAreaColor",  AxiomTheme.BG_PANEL);
+        UIManager.put("TabbedPane.focus",             AxiomTheme.BG_PANEL);
 
         setLayout(new BorderLayout(0, 0));
         setBackground(AxiomTheme.BG_PANEL);
 
-        add(buildHeader(),     BorderLayout.NORTH);
-        add(buildScriptList(), BorderLayout.CENTER);
-        add(buildBottom(),     BorderLayout.SOUTH);
+        add(buildHeader(),           BorderLayout.NORTH);
+        add(buildTabbedScriptPanel(), BorderLayout.CENTER);
+        add(buildBottom(),            BorderLayout.SOUTH);
 
-        // Auto-select first script
-        if (!scripts.isEmpty()) selectScript(scripts.get(0), null);
+        // Auto-select first F2P script
+        if (!f2pScripts.isEmpty()) selectScript(f2pScripts.get(0), null);
 
         // Poll state every 500ms and refresh the status bar
         new Timer(500, e -> SwingUtilities.invokeLater(this::refreshStatus)).start();
@@ -138,22 +164,28 @@ public class AxiomPanel extends PluginPanel
         return wrapper;
     }
 
-    private JScrollPane buildScriptList()
+    private JTabbedPane buildTabbedScriptPanel()
+    {
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.setBackground(AxiomTheme.BG_DEEP);
+        tabs.setForeground(AxiomTheme.TEXT);
+        tabs.setFont(AxiomTheme.fontSmall());
+        tabs.setBorder(BorderFactory.createEmptyBorder());
+
+        tabs.addTab("F2P", buildScriptListPanel(f2pScripts));
+        tabs.addTab("P2P", buildScriptListPanel(p2pScripts));
+
+        return tabs;
+    }
+
+    private JScrollPane buildScriptListPanel(List<BotScript> scriptList)
     {
         JPanel list = new JPanel();
         list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
         list.setBackground(AxiomTheme.BG_PANEL);
         list.setBorder(new EmptyBorder(AxiomTheme.PAD_SM, 0, AxiomTheme.PAD_SM, 0));
 
-        // Section label
-        JLabel sectionLabel = new JLabel("SCRIPTS");
-        sectionLabel.setFont(AxiomTheme.fontSmall());
-        sectionLabel.setForeground(AxiomTheme.TEXT_DIM);
-        sectionLabel.setBorder(new EmptyBorder(
-            AxiomTheme.PAD_MD, AxiomTheme.PAD_LG, AxiomTheme.PAD_XS, AxiomTheme.PAD_LG));
-        list.add(sectionLabel);
-
-        for (BotScript script : scripts)
+        for (BotScript script : scriptList)
         {
             list.add(buildScriptRow(script));
         }

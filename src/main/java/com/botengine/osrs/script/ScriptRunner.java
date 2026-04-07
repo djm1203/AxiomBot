@@ -20,7 +20,10 @@ import com.botengine.osrs.util.Time;
 import com.botengine.osrs.util.WorldHopper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import com.botengine.osrs.util.SessionStats;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
 
@@ -69,6 +72,7 @@ public class ScriptRunner
     private final Antiban antiban;
     private final Time time;
     private final Log botLog;
+    private final SessionStats sessionStats;
 
     // ── Plugin config ─────────────────────────────────────────────────────────
     private final BotEngineConfig config;
@@ -87,6 +91,9 @@ public class ScriptRunner
     /** Consecutive onLoop() errors — stops script after MAX_CONSECUTIVE_ERRORS. */
     private int consecutiveErrors = 0;
     private static final int MAX_CONSECUTIVE_ERRORS = 5;
+
+    /** True when script was auto-paused due to logout — resumes on re-login. */
+    private volatile boolean logoutPaused = false;
 
     @Inject
     public ScriptRunner(
@@ -108,6 +115,7 @@ public class ScriptRunner
         Antiban antiban,
         Time time,
         Log botLog,
+        SessionStats sessionStats,
         BotEngineConfig config
     )
     {
@@ -126,10 +134,35 @@ public class ScriptRunner
         this.groundItems = groundItems;
         this.worldHopper = worldHopper;
         this.grandExchange = grandExchange;
-        this.antiban = antiban;
-        this.time = time;
-        this.botLog = botLog;
-        this.config = config;
+        this.antiban      = antiban;
+        this.time         = time;
+        this.botLog       = botLog;
+        this.sessionStats = sessionStats;
+        this.config       = config;
+    }
+
+    // ── GameState handler — logout detection ──────────────────────────────────
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event)
+    {
+        GameState gs = event.getGameState();
+
+        if (gs == GameState.LOGIN_SCREEN || gs == GameState.CONNECTION_LOST)
+        {
+            if (state == ScriptState.RUNNING || state == ScriptState.BREAKING)
+            {
+                botLog.info("Logged out — auto-pausing script");
+                logoutPaused = true;
+                state = ScriptState.PAUSED;
+            }
+        }
+        else if (gs == GameState.LOGGED_IN && logoutPaused)
+        {
+            botLog.info("Logged back in — resuming script");
+            logoutPaused = false;
+            state = ScriptState.RUNNING;
+        }
     }
 
     // ── GameTick handler ──────────────────────────────────────────────────────
@@ -206,7 +239,9 @@ public class ScriptRunner
         botLog.info("Starting script: " + script.getName());
         activeScript.onStart();
         antiban.reset();
+        sessionStats.reset(client);
         consecutiveErrors = 0;
+        logoutPaused = false;
         state = ScriptState.RUNNING;
     }
 
@@ -236,6 +271,8 @@ public class ScriptRunner
                 log.error("Error during script stop: {}", e.getMessage(), e);
             }
         }
+        sessionStats.stop();
+        logoutPaused = false;
         state = ScriptState.STOPPED;
     }
 
