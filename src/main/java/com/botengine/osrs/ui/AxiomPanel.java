@@ -1,5 +1,7 @@
 package com.botengine.osrs.ui;
 
+import com.botengine.osrs.license.LicenseManager;
+import com.botengine.osrs.license.LicenseTier;
 import com.botengine.osrs.script.BotScript;
 import com.botengine.osrs.script.ScriptRunner;
 import com.botengine.osrs.script.ScriptState;
@@ -24,9 +26,11 @@ import javax.inject.Singleton;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -59,14 +63,16 @@ import java.util.List;
 @Singleton
 public class AxiomPanel extends PluginPanel
 {
-    private final ScriptRunner runner;
-    private final ClientThread clientThread;
+    private final ScriptRunner    runner;
+    private final ClientThread    clientThread;
+    private final LicenseManager  licenseManager;
     private final List<BotScript> scripts; // all scripts (F2P + P2P combined)
 
     // ── Status bar widgets (updated by timer) ─────────────────────────────────
     private JLabel statusDot;
     private JLabel statusText;
     private JLabel activeScriptLabel;
+    private JLabel tierBadge;
 
     // ── Control buttons ───────────────────────────────────────────────────────
     private AxiomButton btnConfigStart;
@@ -82,8 +88,9 @@ public class AxiomPanel extends PluginPanel
 
     @Inject
     public AxiomPanel(
-        ScriptRunner runner,
-        ClientThread clientThread,
+        ScriptRunner     runner,
+        ClientThread     clientThread,
+        LicenseManager   licenseManager,
         CombatScript      combat,
         WoodcuttingScript woodcutting,
         MiningScript      mining,
@@ -100,8 +107,9 @@ public class AxiomPanel extends PluginPanel
     )
     {
         super(false); // false = no default wrapping scroll pane
-        this.runner       = runner;
-        this.clientThread = clientThread;
+        this.runner          = runner;
+        this.clientThread    = clientThread;
+        this.licenseManager  = licenseManager;
         this.f2pScripts   = Arrays.asList(
             combat, woodcutting, mining, fishing, cooking,
             alchemy, smithing, crafting, firemaking
@@ -150,11 +158,31 @@ public class AxiomPanel extends PluginPanel
         logo.setForeground(AxiomTheme.ACCENT);
         header.add(logo, BorderLayout.WEST);
 
-        // Version badge
+        // Right side: version + license tier badge
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        right.setBackground(AxiomTheme.BG_DEEP);
+
         JLabel version = new JLabel("v1.0");
         version.setFont(AxiomTheme.fontSmall());
         version.setForeground(AxiomTheme.TEXT_DIM);
-        header.add(version, BorderLayout.EAST);
+
+        tierBadge = new JLabel(licenseManager.getStatusText());
+        tierBadge.setFont(new Font("SansSerif", Font.BOLD, 9));
+        tierBadge.setForeground(licenseManager.getStatusColor());
+        tierBadge.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(licenseManager.getStatusColor(), 1),
+            new EmptyBorder(1, 4, 1, 4)
+        ));
+        tierBadge.setToolTipText("Click to enter / change your license key");
+        tierBadge.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        tierBadge.addMouseListener(new MouseAdapter()
+        {
+            @Override public void mouseClicked(MouseEvent e) { showLicenseDialog(); }
+        });
+
+        right.add(version);
+        right.add(tierBadge);
+        header.add(right, BorderLayout.EAST);
 
         // Bottom separator
         JPanel wrapper = new JPanel(new BorderLayout());
@@ -374,6 +402,15 @@ public class AxiomPanel extends PluginPanel
         if (script == null) return;
         selectScript(script, row);
 
+        // P2P scripts require PREMIUM or CREATOR tier
+        if (p2pScripts.contains(script) && !licenseManager.isP2PUnlocked())
+        {
+            boolean unlocked = showLicensePrompt(
+                "\"" + script.getName() + "\" is a P2P script.\n"
+                + "Enter your license key to continue:");
+            if (!unlocked) return;
+        }
+
         ScriptConfigDialog<?> dialog = script.createConfigDialog(this);
         if (dialog == null) return;
 
@@ -385,6 +422,67 @@ public class AxiomPanel extends PluginPanel
             // must run on the RuneLite client thread, not the Swing EDT.
             clientThread.invokeLater(() -> runner.start(script, settings));
         }
+    }
+
+    /**
+     * Shows the license key entry dialog (launched from the tier badge or a
+     * locked P2P script).  Refreshes the tier badge on success.
+     */
+    private void showLicenseDialog()
+    {
+        showLicensePrompt("Enter your Axiom license key:");
+    }
+
+    /**
+     * Prompts for a license key and activates it.
+     *
+     * @param message prompt text shown above the input field
+     * @return {@code true} if a valid key was entered and activated
+     */
+    private boolean showLicensePrompt(String message)
+    {
+        JTextField keyField = new JTextField(30);
+        Object[] content = { message, keyField };
+
+        int result = JOptionPane.showConfirmDialog(
+            this, content, "Axiom License",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result != JOptionPane.OK_OPTION) return false;
+
+        String key = keyField.getText().trim();
+        if (licenseManager.activate(key))
+        {
+            refreshTierBadge();
+            JOptionPane.showMessageDialog(
+                this,
+                "License activated — " + licenseManager.getStatusText() + " tier unlocked.",
+                "Axiom License",
+                JOptionPane.INFORMATION_MESSAGE);
+            return true;
+        }
+        else
+        {
+            JOptionPane.showMessageDialog(
+                this,
+                "Invalid or expired license key.",
+                "Axiom License",
+                JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+    }
+
+    /** Refreshes the tier badge label and border colour after a key activation. */
+    private void refreshTierBadge()
+    {
+        if (tierBadge == null) return;
+        tierBadge.setText(licenseManager.getStatusText());
+        tierBadge.setForeground(licenseManager.getStatusColor());
+        tierBadge.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(licenseManager.getStatusColor(), 1),
+            new EmptyBorder(1, 4, 1, 4)
+        ));
+        tierBadge.repaint();
     }
 
     private void togglePauseResume()
