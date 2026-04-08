@@ -5,7 +5,9 @@ import com.botengine.osrs.api.GroundItems;
 import com.botengine.osrs.script.BotScript;
 import com.botengine.osrs.ui.ScriptConfigDialog;
 import com.botengine.osrs.ui.ScriptSettings;
-import net.runelite.api.GameObject;
+import net.runelite.api.Skill;
+import net.runelite.api.TileObject;
+import net.runelite.api.coords.WorldPoint;
 
 import javax.inject.Inject;
 import javax.swing.*;
@@ -31,50 +33,89 @@ public class AgilityScript extends BotScript
     private static final int CLICK_TIMEOUT    = 5;  // ticks before retry
 
     // ── Course data ───────────────────────────────────────────────────────────
+    //
+    // IDs should be verified in-game with RuneLite's Object Markers plugin.
+    // If an ID is wrong the script falls back to name-based lookup and logs
+    // the real ID so you can update the array below.
 
-    private static final Map<String, int[]> COURSE_OBSTACLES = new LinkedHashMap<>();
-    private static final Map<String, String[]> COURSE_ACTIONS = new LinkedHashMap<>();
+    private static final Map<String, int[]>      COURSE_OBSTACLES = new LinkedHashMap<>();
+    private static final Map<String, String[]>   COURSE_ACTIONS   = new LinkedHashMap<>();
+    private static final Map<String, String[]>   COURSE_NAMES     = new LinkedHashMap<>();
 
     static
     {
+        // ── Gnome Stronghold ──────────────────────────────────────────────────
+        // IDs verified in-game via diagnostic dump (2026-04-07):
+        //   1: 23145 Log balance ✓
+        //   2: 23134 Obstacle net ✓
+        //   3: 23138 Obstacle pipe ✓ (2t when at obstacle 3 position)
+        //   4-6: inside treehouse (Tree branch up, Balancing rope, Tree branch down)
+        //   7: 23139 Obstacle pipe ✓ (Squeeze-through after tree descent)
+        //   8: 23135 Obstacle net ✓ (final net — course complete)
         COURSE_OBSTACLES.put("Gnome Stronghold",
-            new int[]{ 23145, 23134, 23559, 23560, 23557, 23132, 23131 });
+            new int[]{ 23145, 23134, 23138, 23559, 23560, 23557, 23139, 23135 });
         COURSE_ACTIONS.put("Gnome Stronghold",
-            new String[]{ "Walk-on", "Climb-over", "Climb-up", "Walk-on",
-                          "Climb-down", "Climb-over", "Squeeze-through" });
+            new String[]{ "Walk-on", "Climb-over", "Squeeze-through", "Climb-up",
+                          "Walk-on", "Climb-down", "Squeeze-through", "Climb-over" });
+        COURSE_NAMES.put("Gnome Stronghold",
+            new String[]{ "Log balance", "Obstacle net", "Obstacle pipe",
+                          "Tree branch", "Balancing rope", "Tree branch",
+                          "Obstacle pipe", "Obstacle net" });
 
+        // ── Draynor rooftop ───────────────────────────────────────────────────
         COURSE_OBSTACLES.put("Draynor",
             new int[]{ 11404, 11405, 11406, 11407, 11408, 11409 });
         COURSE_ACTIONS.put("Draynor",
-            new String[]{ "Climb", "Climb", "Climb", "Climb", "Jump", "Jump" });
+            new String[]{ "Climb", "Walk-on", "Cross", "Climb", "Jump", "Jump" });
+        COURSE_NAMES.put("Draynor",
+            new String[]{ "Rough wall", "Tightrope", "Tightrope",
+                          "Narrow wall", "Wall", "Gap" });
 
+        // ── Al Kharid rooftop ─────────────────────────────────────────────────
         COURSE_OBSTACLES.put("Al Kharid",
             new int[]{ 11378, 11380, 11381, 11382, 11383, 11384, 11385, 11386 });
         COURSE_ACTIONS.put("Al Kharid",
-            new String[]{ "Climb", "Climb", "Climb", "Climb", "Climb", "Climb", "Climb", "Climb" });
+            new String[]{ "Climb", "Cross", "Climb", "Climb", "Cross",
+                          "Climb", "Cross", "Jump" });
+        COURSE_NAMES.put("Al Kharid",
+            new String[]{ "Rough wall", "Tightrope", "Cable", "Tree",
+                          "Tightrope", "Roof top", "Tightrope", "Gap" });
 
+        // ── Varrock rooftop ───────────────────────────────────────────────────
         COURSE_OBSTACLES.put("Varrock",
             new int[]{ 14412, 14413, 14414, 14832, 14415, 14416, 14417, 14418 });
         COURSE_ACTIONS.put("Varrock",
-            new String[]{ "Climb", "Climb", "Jump", "Climb", "Jump", "Jump", "Climb", "Jump" });
+            new String[]{ "Climb", "Leap", "Hurdle", "Jump-up", "Leap", "Leap", "Climb", "Jump" });
+        COURSE_NAMES.put("Varrock",
+            new String[]{ "Rough wall", "Clothes line", "Gap", "Wall",
+                          "Gap", "Gap", "Ledge", "Edge" });
 
+        // ── Canifis rooftop ───────────────────────────────────────────────────
         COURSE_OBSTACLES.put("Canifis",
             new int[]{ 14856, 14857, 14858, 14859, 14860, 14861, 14862 });
         COURSE_ACTIONS.put("Canifis",
             new String[]{ "Climb", "Jump", "Jump", "Jump", "Vault", "Jump", "Jump" });
+        COURSE_NAMES.put("Canifis",
+            new String[]{ "Tall tree", "Gap", "Gap", "Gap",
+                          "Polevault", "Gap", "Gap" });
     }
 
     // ── State machine ─────────────────────────────────────────────────────────
 
     private enum State { FIND_OBSTACLE, CLICKING_OBSTACLE, WAITING, PICK_MARK, COURSE_COMPLETE }
 
-    private State    state                = State.FIND_OBSTACLE;
-    private String   courseName           = "Gnome Stronghold";
-    private boolean  pickupMarks          = true;
-    private int[]    obstacleIds;
-    private String[] obstacleActions;
-    private int      currentObstacleIndex = 0;
-    private int      ticksWaited          = 0;
+    private State      state                = State.FIND_OBSTACLE;
+    private String     courseName           = "Gnome Stronghold";
+    private boolean    pickupMarks          = true;
+    private int[]      obstacleIds;
+    private String[]   obstacleActions;
+    private String[]   obstacleNames;
+    private int        currentObstacleIndex = 0;
+    private int        ticksWaited          = 0;
+    private WorldPoint lastPosition         = null;
+    private int        stablePosTicks       = 0;
+    private int        lastAgilityXp        = 0;
+    private WorldPoint clickedFromPosition  = null;
 
     @Inject
     public AgilityScript() {}
@@ -106,7 +147,13 @@ public class AgilityScript extends BotScript
                               COURSE_OBSTACLES.get("Gnome Stronghold"));
         obstacleActions = COURSE_ACTIONS.getOrDefault(courseName,
                               COURSE_ACTIONS.get("Gnome Stronghold"));
+        obstacleNames   = COURSE_NAMES.getOrDefault(courseName,
+                              COURSE_NAMES.get("Gnome Stronghold"));
         currentObstacleIndex = 0;
+        stablePosTicks       = 0;
+        lastPosition         = null;
+        lastAgilityXp        = client.getSkillExperience(Skill.AGILITY);
+        clickedFromPosition  = null;
         state = State.FIND_OBSTACLE;
         log.info("Agility started — course='{}' pickupMarks={}", courseName, pickupMarks);
     }
@@ -145,22 +192,35 @@ public class AgilityScript extends BotScript
             }
         }
 
-        int obstacleId = obstacleIds[currentObstacleIndex];
-        GameObject obstacle = gameObjects.nearest(obstacleId);
+        int        obstacleId   = obstacleIds[currentObstacleIndex];
+        String     obstacleName = obstacleNames[currentObstacleIndex];
+        String     action       = obstacleActions[currentObstacleIndex];
+
+        // Search ALL tile object types (GameObject, WallObject, DecorativeObject, GroundObject)
+        TileObject obstacle = gameObjects.nearestTileObject(obstacleId);
+
         if (obstacle == null)
         {
-            // Not yet loaded in scene — wait.
-            // If this keeps printing, the obstacle ID is wrong for this course.
-            // Use RuneLite's Object Markers plugin to find the correct ID in-game.
-            log.debug("Waiting for obstacle [{}/{}] id={} action='{}'",
+            // ID not found — fall back to name lookup across all tile object types
+            obstacle = gameObjects.nearestTileObject(obstacleName);
+            if (obstacle == null)
+            {
+                log.warn("Obstacle [{}/{}] not found: expected id={} name='{}'. Nearby objects: {}",
+                    currentObstacleIndex + 1, obstacleIds.length, obstacleId, obstacleName,
+                    gameObjects.dumpNearby(15));
+                return;
+            }
+            // Found by name — log the real ID so we can update the hardcoded array
+            log.warn("Obstacle [{}/{}] id={} wrong — found '{}' by name, real ID={}. Update COURSE_OBSTACLES.",
                 currentObstacleIndex + 1, obstacleIds.length,
-                obstacleId, obstacleActions[currentObstacleIndex]);
-            return;
+                obstacleId, obstacleName, obstacle.getId());
+            obstacleIds[currentObstacleIndex] = obstacle.getId(); // patch for this session
         }
 
-        String action = obstacleActions[currentObstacleIndex];
-        log.info("Clicking obstacle [{}/{}] id={} action='{}'",
-            currentObstacleIndex + 1, obstacleIds.length, obstacleId, action);
+        log.info("Clicking obstacle [{}/{}] id={} name='{}' action='{}'",
+            currentObstacleIndex + 1, obstacleIds.length,
+            obstacle.getId(), obstacleName, action);
+        clickedFromPosition = players.getLocation();
         interaction.click(obstacle, action);
         antiban.reactionDelay();
         ticksWaited = 0;
@@ -177,9 +237,9 @@ public class AgilityScript extends BotScript
             state = State.WAITING;
             return;
         }
-        if (players.isMoving())
+        if (clickedFromPosition != null && !players.getLocation().equals(clickedFromPosition))
         {
-            // Walking to obstacle
+            // Player moved away from the click position — walking to or on the obstacle
             ticksWaited = 0;
             state = State.WAITING;
             return;
@@ -198,12 +258,56 @@ public class AgilityScript extends BotScript
 
     private void waiting()
     {
-        if (!players.isIdle() || players.isMoving())
+        // Primary completion signal: agility XP increase (server-authoritative, fires exactly
+        // once per obstacle regardless of obstacle type, animation, or equipment worn).
+        int xp = client.getSkillExperience(Skill.AGILITY);
+        if (xp > lastAgilityXp)
         {
+            lastAgilityXp  = xp;
+            ticksWaited    = 0;
+            stablePosTicks = 0;
+            lastPosition   = null;
+            advanceObstacle();
             return;
         }
 
-        // Player is idle — obstacle complete, advance
+        // Fallback: position stability for up to 20 ticks (catches obstacles that award
+        // no XP, or in case the XP event fires on a different tick than expected).
+        WorldPoint pos = players.getLocation();
+        if (pos.equals(lastPosition))
+        {
+            stablePosTicks++;
+        }
+        else
+        {
+            stablePosTicks = 0;
+            lastPosition   = pos;
+        }
+
+        if (stablePosTicks >= 4 && players.getAnimation() == -1)
+        {
+            // Stable 4 ticks, no animation, no XP — assume complete (e.g. Mark of Grace pickup)
+            stablePosTicks = 0;
+            lastPosition   = null;
+            advanceObstacle();
+            return;
+        }
+
+        // Hard timeout — prevents getting stuck if XP never fires
+        ticksWaited++;
+        if (ticksWaited > 20)
+        {
+            log.warn("WAITING timeout (20t) on obstacle [{}/{}] — no XP received, retrying click",
+                currentObstacleIndex + 1, obstacleIds.length);
+            ticksWaited    = 0;
+            stablePosTicks = 0;
+            lastPosition   = null;
+            state = State.FIND_OBSTACLE;
+        }
+    }
+
+    private void advanceObstacle()
+    {
         currentObstacleIndex++;
         if (currentObstacleIndex >= obstacleIds.length)
         {

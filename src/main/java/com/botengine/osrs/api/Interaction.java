@@ -8,6 +8,7 @@ import net.runelite.api.MenuAction;
 import net.runelite.api.NPC;
 import net.runelite.api.Tile;
 import net.runelite.api.TileItem;
+import net.runelite.api.TileObject;
 import net.runelite.api.widgets.Widget;
 
 import javax.inject.Inject;
@@ -98,6 +99,31 @@ public class Interaction
             }
         }
         return MenuAction.GAME_OBJECT_FIRST_OPTION;
+    }
+
+    /**
+     * Interacts with any TileObject (GameObject, WallObject, DecorativeObject, GroundObject).
+     * Uses the same menu-action resolution as click(GameObject, String) but accepts
+     * the common TileObject interface so agility obstacles and other non-GameObject
+     * tile objects can be clicked without special-casing in scripts.
+     *
+     * @param obj    the tile object to interact with
+     * @param action the option text (e.g. "Walk-on", "Climb", "Jump")
+     */
+    public void click(TileObject obj, String action)
+    {
+        net.runelite.api.ObjectComposition def = client.getObjectDefinition(obj.getId());
+        String name = (def != null && def.getName() != null) ? def.getName() : "";
+
+        int sceneX = obj.getLocalLocation().getSceneX();
+        int sceneY = obj.getLocalLocation().getSceneY();
+
+        MenuAction menuAction = resolveObjectAction(def, action);
+
+        log.debug("click(TileObject) id={} name='{}' action='{}' menuAction={} scene=({},{})",
+            obj.getId(), name, action, menuAction, sceneX, sceneY);
+
+        client.menuAction(sceneX, sceneY, menuAction, obj.getId(), -1, action, name);
     }
 
     // ── NPCs ──────────────────────────────────────────────────────────────────
