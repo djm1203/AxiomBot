@@ -79,26 +79,14 @@ public class BankImpl implements Bank
     @Override
     public void depositAll()
     {
-        int packedId = WidgetInfo.BANK_DEPOSIT_INVENTORY.getId();
-        log.info("[BANKING] depositAll: WidgetInfo.BANK_DEPOSIT_INVENTORY packedId={} (group={} child={})",
-            packedId, packedId >> 16, packedId & 0xFFFF);
-
         Widget depositBtn = client.getWidget(WidgetInfo.BANK_DEPOSIT_INVENTORY);
         if (depositBtn == null || depositBtn.isHidden())
         {
             log.warn("[BANKING] deposit widget null/hidden — bank not fully open");
             return;
         }
-
-        log.info("[BANKING] deposit widget found: id={} bounds={}", depositBtn.getId(), depositBtn.getBounds());
-
-        // Pattern: widgetId as param1, id=1 (first action), extra=-1
-        client.menuAction(
-            1, depositBtn.getId(),
-            MenuAction.CC_OP,
-            1, -1,
-            "Deposit inventory", ""
-        );
+        log.info("[BANKING] clicking deposit inventory button (bounds={})", depositBtn.getBounds());
+        robotClickWidget(depositBtn);
     }
 
     @Override
@@ -174,7 +162,7 @@ public class BankImpl implements Bank
     public void close()
     {
         Widget closeBtn = client.getWidget(BANK_GROUP_ID, CLOSE_CHILD_ID);
-        if (closeBtn != null && !closeBtn.isHidden()) clickWidget(closeBtn);
+        if (closeBtn != null && !closeBtn.isHidden()) robotClickWidget(closeBtn);
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────
@@ -185,14 +173,34 @@ public class BankImpl implements Bank
         return gameObjects.nearest(o -> o.hasAction("Bank"));
     }
 
-    private void clickWidget(Widget widget)
+    /**
+     * Moves the system mouse cursor to the center of the widget's canvas bounds
+     * and fires a left-click. Mirrors the approach used in SceneObjectWrapper for
+     * game objects — menuAction CC_OP does not work reliably for widget buttons
+     * in this RuneLite build, so a real mouse event is required.
+     */
+    private void robotClickWidget(Widget widget)
     {
-        client.menuAction(
-            1, widget.getId(),
-            MenuAction.CC_OP,
-            1, -1,
-            "", ""
-        );
+        try
+        {
+            java.awt.Rectangle bounds = widget.getBounds();
+            java.awt.Canvas canvas = client.getCanvas();
+            if (canvas == null) { log.warn("robotClickWidget: canvas is null"); return; }
+
+            java.awt.Point origin = canvas.getLocationOnScreen();
+            int x = origin.x + bounds.x + bounds.width  / 2;
+            int y = origin.y + bounds.y + bounds.height / 2;
+
+            java.awt.Robot robot = new java.awt.Robot();
+            robot.mouseMove(x, y);
+            robot.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK);
+            robot.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK);
+            log.info("robotClickWidget: clicked ({}, {})", x, y);
+        }
+        catch (Exception e)
+        {
+            log.warn("robotClickWidget failed: {}", e.getMessage());
+        }
     }
 
     private static int quantityToOp(int quantity)
