@@ -327,44 +327,56 @@ public class Interaction
     }
 
     /**
-     * Uses one inventory item on another inventory item.
-     * Fires ITEM_USE on slot1 then ITEM_USE_ON_WIDGET on slot2.
-     * Used to open production dialogues (chisel+gem, knife+log, etc.)
+     * Uses one inventory item on another inventory item (two separate calls,
+     * intended to be called across two game ticks).
+     *
+     * Call {@link #selectItem(int)} on tick 1, then {@link #useSelectedItemOn(int)}
+     * on tick 2 once the client has entered item-selected mode.
      *
      * @param slot1 inventory slot of the tool/resource to use
      * @param slot2 inventory slot of the target item
      */
     public void useItemOnItem(int slot1, int slot2)
     {
-        int widgetId = net.runelite.api.widgets.WidgetInfo.INVENTORY.getId();
+        selectItem(slot1);
+        useSelectedItemOn(slot2);
+    }
 
-        log.debug("useItemOnItem slot1={} slot2={}", slot1, slot2);
-
-        // Step 1: activate the first item (ITEM_USE)
+    /**
+     * Tick 1 — selects an inventory item (enters item-use cursor mode).
+     * The client must process this before the second step is sent.
+     *
+     * @param slot the inventory slot (0–27) to select
+     */
+    public void selectItem(int slot)
+    {
         net.runelite.api.ItemContainer inv =
             client.getItemContainer(net.runelite.api.InventoryID.INVENTORY);
         if (inv == null) return;
-        int item1Id = inv.getItems()[slot1].getId();
+        int itemId = inv.getItems()[slot].getId();
+        int widgetId = net.runelite.api.widgets.WidgetInfo.INVENTORY.getId();
 
-        client.menuAction(
-            slot1, widgetId,
-            MenuAction.ITEM_USE,
-            item1Id,
-            -1,
-            "Use",
-            ""
-        );
+        log.debug("selectItem slot={} itemId={}", slot, itemId);
+        client.menuAction(slot, widgetId, MenuAction.ITEM_USE, itemId, -1, "Use", "");
+    }
 
-        // Step 2: use on second item (WIDGET_TARGET_ON_WIDGET)
-        int item2Id = inv.getItems()[slot2].getId();
-        client.menuAction(
-            slot2, widgetId,
-            MenuAction.WIDGET_TARGET_ON_WIDGET,
-            item2Id,
-            -1,
-            "Use",
-            ""
-        );
+    /**
+     * Tick 2 — uses the currently-selected item on a target inventory slot.
+     * Must be called the tick after {@link #selectItem(int)}.
+     *
+     * @param targetSlot the inventory slot (0–27) to use the item on
+     */
+    public void useSelectedItemOn(int targetSlot)
+    {
+        net.runelite.api.ItemContainer inv =
+            client.getItemContainer(net.runelite.api.InventoryID.INVENTORY);
+        if (inv == null) return;
+        int itemId = inv.getItems()[targetSlot].getId();
+        int widgetId = net.runelite.api.widgets.WidgetInfo.INVENTORY.getId();
+
+        log.debug("useSelectedItemOn slot={} itemId={}", targetSlot, itemId);
+        client.menuAction(targetSlot, widgetId,
+            MenuAction.WIDGET_TARGET_ON_WIDGET, itemId, -1, "Use", "");
     }
 
     // ── Use-item-on-object ────────────────────────────────────────────────────

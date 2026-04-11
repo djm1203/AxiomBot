@@ -33,8 +33,8 @@ public class FletchingConfigDialog extends ScriptConfigDialog<FletchingSettings>
         root.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         AxiomSectionPanel behaviour = new AxiomSectionPanel("BEHAVIOUR");
-        cbBankingMode = makeCheckBox("Banking mode (restock materials)", true);
-        behaviour.addCheckRow("", cbBankingMode);
+        cbBankingMode = makeCheckBox("", true);
+        behaviour.addCheckRow("Banking mode (restock materials)", cbBankingMode);
         root.add(behaviour);
 
         return root;

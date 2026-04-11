@@ -194,6 +194,13 @@ public class ScriptRunner
                     return;
                 }
 
+                // Honour tick-delay pauses requested by the script
+                if (activeScript.hasTickDelay())
+                {
+                    activeScript.decrementTickDelay();
+                    return;
+                }
+
                 try
                 {
                     activeScript.onLoop();

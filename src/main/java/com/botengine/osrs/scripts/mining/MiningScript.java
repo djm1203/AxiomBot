@@ -80,6 +80,7 @@ public class MiningScript extends BotScript
     private State   state            = State.FIND_ROCK;
     private int     idleTickCount    = 0;
     private int     waitSackTicks    = 0;
+    private boolean depositedThisTick = false;
     private String  rockNameFilter   = "";
     private boolean bankingMode      = false;
     private boolean shiftDrop        = false;
@@ -171,13 +172,16 @@ public class MiningScript extends BotScript
         }
 
         GameObject rock = findRock();
-        if (rock == null) { log.debug("No ore rock found — waiting"); return; }
+        if (rock == null) { log.warn("No rock found nearby (filter='{}') — waiting", rockNameFilter.isEmpty() ? "any" : rockNameFilter); return; }
+
+        net.runelite.api.ObjectComposition def = client.getObjectDefinition(rock.getId());
+        String rockName = (def != null && def.getName() != null) ? def.getName() : "?";
+        log.info("Mining rock id={} name='{}'", rock.getId(), rockName);
 
         interaction.click(rock, "Mine");
-        antiban.reactionDelay();
+        setTickDelay(antiban.reactionTicks());
         state = State.MINING;
         idleTickCount = 0;
-        log.debug("Mining rock id={}", rock.getId());
     }
 
     private void checkMiningState()
@@ -201,7 +205,7 @@ public class MiningScript extends BotScript
             idleTickCount++;
             if (idleTickCount >= 2)
             {
-                antiban.randomDelay(200, 600);
+                setTickDelay(antiban.randomIdleTicks(1, 3));
                 state = State.FIND_ROCK;
                 idleTickCount = 0;
             }
@@ -209,6 +213,11 @@ public class MiningScript extends BotScript
         else
         {
             idleTickCount = 0;
+            // Occasional human-like idle behaviours while waiting for the rock
+            if (antiban.shouldIdleAction(0.04))
+                new Thread(() -> antiban.performCameraJitter()).start();
+            else if (antiban.shouldIdleAction(0.015))
+                new Thread(() -> antiban.performTabGlance()).start();
         }
     }
 
@@ -217,7 +226,6 @@ public class MiningScript extends BotScript
         if (shiftDrop)
         {
             interaction.dropAll(ORE_IDS);
-            antiban.reactionDelay();
             state = State.FIND_ROCK;
             return;
         }
@@ -227,7 +235,6 @@ public class MiningScript extends BotScript
             if (inventory.contains(oreId))
             {
                 interaction.clickInventoryItem(oreId, "Drop");
-                antiban.randomDelay(80, 160);
                 droppedAny = true;
             }
         }
@@ -257,7 +264,7 @@ public class MiningScript extends BotScript
         if (vein == null) { log.debug("No pay-dirt vein found — waiting"); return; }
 
         interaction.click(vein, "Mine");
-        antiban.reactionDelay();
+        setTickDelay(antiban.reactionTicks());
         state = State.MINING_VEIN;
         idleTickCount = 0;
         log.debug("Mining vein id={}", vein.getId());
@@ -282,7 +289,7 @@ public class MiningScript extends BotScript
             idleTickCount++;
             if (idleTickCount >= 2)
             {
-                antiban.randomDelay(200, 500);
+                setTickDelay(antiban.randomIdleTicks(1, 2));
                 state = State.FIND_VEIN;
                 idleTickCount = 0;
             }
@@ -290,6 +297,8 @@ public class MiningScript extends BotScript
         else
         {
             idleTickCount = 0;
+            if (antiban.shouldIdleAction(0.04))
+                new Thread(() -> antiban.performCameraJitter()).start();
         }
     }
 
@@ -318,7 +327,6 @@ public class MiningScript extends BotScript
         if (dirtSlot == -1) { state = State.WAIT_SACK; return; }
 
         interaction.useItemOn(PAYDIRT_ID, dirtSlot, hopper);
-        antiban.reactionDelay();
         log.debug("Deposited pay-dirt in hopper");
 
         if (!inventory.contains(PAYDIRT_ID))
@@ -359,7 +367,6 @@ public class MiningScript extends BotScript
         }
 
         interaction.click(sack, "Search");
-        antiban.reactionDelay();
         log.debug("Collecting from MLM sack");
 
         if (inventory.isFull())
@@ -374,28 +381,47 @@ public class MiningScript extends BotScript
     {
         if (bank.isOpen())
         {
-            bank.depositAll();
-            antiban.reactionDelay();
+            if (!depositedThisTick)
+            {
+                // Tick 1: deposit everything, flag that we deposited
+                bank.depositAll();
+                depositedThisTick = true;
+                return;
+            }
+
+            // Tick 2+: deposit was processed — close and leave banking state
             bank.close();
+            depositedThisTick = false;
+            state = motherlodeMode ? State.FIND_VEIN : State.FIND_ROCK;
 
             if (homeTile != null && movement.distanceTo(homeTile) > 5)
             {
                 movement.setRunning(true);
                 movement.walkTo(homeTile);
             }
-            else
-            {
-                state = motherlodeMode ? State.FIND_VEIN : State.FIND_ROCK;
-            }
             return;
         }
 
+        // Reset deposit flag whenever bank is closed
+        depositedThisTick = false;
+
         if (bank.isNearBank())
+        {
             bank.openNearest();
-        else
+            return;
+        }
+
+        // Walk toward nearest visible bank object
+        GameObject bankObj = bank.findNearestBankObject();
+        if (bankObj != null)
         {
             movement.setRunning(true);
-            log.debug("Walking to find bank...");
+            movement.walkTo(bankObj.getWorldLocation());
+            log.debug("Walking to bank at {}", bankObj.getWorldLocation());
+        }
+        else
+        {
+            log.warn("No bank found in scene");
         }
     }
 
@@ -412,7 +438,6 @@ public class MiningScript extends BotScript
         if (strut == null) return false;
 
         interaction.click(strut, "Hammer");
-        antiban.reactionDelay();
         log.info("Repairing broken strut id={}", strut.getId());
         return true;
     }
@@ -437,22 +462,26 @@ public class MiningScript extends BotScript
         return gameObjects.nearest(VEIN_IDS);
     }
 
-    /** Finds the nearest mineable rock for standard mode. */
+    /**
+     * Finds the nearest mineable rock.
+     * Always searches by "Mine" action so it works at any location without
+     * relying on hardcoded object IDs. Applies rockNameFilter when set.
+     */
     private GameObject findRock()
     {
-        if (rockNameFilter.isEmpty()) return gameObjects.nearest(ROCK_IDS);
         final String filter = rockNameFilter.toLowerCase();
         return gameObjects.nearest(obj -> {
-            for (int id : ROCK_IDS)
+            ObjectComposition def = client.getObjectDefinition(obj.getId());
+            if (def == null || def.getActions() == null) return false;
+            boolean hasMine = false;
+            for (String a : def.getActions()) { if ("Mine".equals(a)) { hasMine = true; break; } }
+            if (!hasMine) return false;
+            if (!filter.isEmpty())
             {
-                if (obj.getId() == id)
-                {
-                    ObjectComposition def = client.getObjectDefinition(obj.getId());
-                    return def != null && def.getName() != null
-                        && def.getName().toLowerCase().contains(filter);
-                }
+                String name = def.getName();
+                return name != null && name.toLowerCase().contains(filter);
             }
-            return false;
+            return true;
         });
     }
 

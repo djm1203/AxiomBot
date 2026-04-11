@@ -219,6 +219,45 @@ public class Antiban
     /** Returns this session's account seed (range 0.85–1.15). */
     public double getAccountSeed() { return accountSeed; }
 
+    /**
+     * Returns a random number of game ticks to wait before the next action.
+     * Models human reaction time as a tick count rather than milliseconds.
+     *   60% → 0 ticks  (react immediately on same tick)
+     *   30% → 1 tick   (slight hesitation)
+     *   10% → 2 ticks  (noticeable pause)
+     *
+     * Use with BotScript.setTickDelay() after clicking a target.
+     */
+    public int reactionTicks()
+    {
+        double r = random.nextDouble() * accountSeed;
+        if (r < 0.55) return 0;
+        if (r < 0.88) return 1;
+        return 2;
+    }
+
+    /**
+     * Returns a random tick count in the range [min, max] inclusive.
+     * Use for variable waits inside state machines (e.g. wait 1–3 ticks before re-mining).
+     */
+    public int randomIdleTicks(int min, int max)
+    {
+        if (min >= max) return min;
+        return min + random.nextInt(max - min + 1);
+    }
+
+    /**
+     * Returns true with ~2% probability, simulating an occasional misclick.
+     * The caller is responsible for re-clicking the correct target.
+     */
+    public boolean shouldMisclick()
+    {
+        return random.nextDouble() < 0.02;
+    }
+
+    /** Returns the configured click jitter radius in pixels. */
+    public int getJitterRadius() { return jitterRadius; }
+
     // ── Mouse jitter ─────────────────────────────────────────────────────────
 
     /**

@@ -22,12 +22,13 @@ import javax.inject.Inject;
  */
 public class FletchingScript extends BotScript
 {
-    private static final int KNIFE_ID      = 946;
-    private static final int BOW_STRING_ID = 1777;
+    private static final int KNIFE_ID        = 946;
+    private static final int BOW_STRING_ID   = 1777;
+    private static final int ARROW_SHAFT_ID  = 52;
 
     private static final int[] LOG_IDS = { 1511, 1521, 1519, 1517, 1515, 1513 };
     private static final int[] UNSTRUNG_BOW_IDS = {
-        50, 48, 54, 58, 62, 66, 52, 56, 60, 64, 68
+        50, 48, 54, 58, 62, 66, 56, 60, 64, 68
     };
     private static final int[] DART_TIP_IDS = {
         819, 820, 821, 822, 823, 824, 3093, 11232 // bronze through dragon + black + dragon
@@ -40,12 +41,13 @@ public class FletchingScript extends BotScript
     private static final int MAKE_ALL_WIDGET =
         net.runelite.api.widgets.WidgetUtil.packComponentId(270, 14);
 
-    private enum State  { DETECT, FLETCHING, WAIT_DIALOGUE, IN_PROGRESS, BANKING, DONE }
-    private enum Mode   { KNIFE, STRING, DARTS, BOLTS, UNKNOWN }
+    private enum State  { DETECT, FLETCHING, SELECTING, WAIT_DIALOGUE, IN_PROGRESS, BANKING, DONE }
+    private enum Mode   { KNIFE, STRING, DARTS, BOLTS, ARROWS, UNKNOWN }
 
     private State state = State.DETECT;
     private Mode  mode  = Mode.UNKNOWN;
     private int   ticksWaited = 0;
+    private int   pendingSlot2 = -1;  // target slot saved during SELECTING
     private boolean bankingMode = false;
     private WorldPoint homeTile;
 
@@ -82,12 +84,13 @@ public class FletchingScript extends BotScript
     {
         switch (state)
         {
-            case DETECT:       detectMode();       break;
-            case FLETCHING:    startFletching();   break;
-            case WAIT_DIALOGUE:waitForDialogue();  break;
-            case IN_PROGRESS:  checkProgress();    break;
-            case BANKING:      handleBanking();    break;
-            case DONE:         log.info("Done");   break;
+            case DETECT:        detectMode();       break;
+            case FLETCHING:     startFletching();   break;
+            case SELECTING:     finishSelection();  break;
+            case WAIT_DIALOGUE: waitForDialogue();  break;
+            case IN_PROGRESS:   checkProgress();    break;
+            case BANKING:       handleBanking();    break;
+            case DONE:          log.info("Done");   break;
         }
     }
 
@@ -108,6 +111,12 @@ public class FletchingScript extends BotScript
         {
             mode = Mode.STRING;
             log.info("Mode: stringing (attaching bow strings)");
+            state = State.FLETCHING;
+        }
+        else if (inventory.contains(FEATHER_ID) && inventory.contains(ARROW_SHAFT_ID))
+        {
+            mode = Mode.ARROWS;
+            log.info("Mode: arrows (arrow shafts + feathers → headless arrows)");
             state = State.FLETCHING;
         }
         else if (inventory.contains(FEATHER_ID) && findDartTip() != -1)
@@ -155,6 +164,13 @@ public class FletchingScript extends BotScript
             slot1 = inventory.getSlot(KNIFE_ID);
             slot2 = inventory.getSlot(logId);
         }
+        else if (mode == Mode.ARROWS)
+        {
+            if (!inventory.contains(ARROW_SHAFT_ID) || !inventory.contains(FEATHER_ID))
+            { state = bankingMode ? State.BANKING : State.DONE; return; }
+            slot1 = inventory.getSlot(FEATHER_ID);
+            slot2 = inventory.getSlot(ARROW_SHAFT_ID);
+        }
         else
         {
             int bowId = findUnstrungBow();
@@ -163,8 +179,20 @@ public class FletchingScript extends BotScript
             slot2 = inventory.getSlot(bowId);
         }
         if (slot1 == -1 || slot2 == -1) return;
-        interaction.useItemOnItem(slot1, slot2);
-        antiban.reactionDelay();
+        log.info("Tick 1/2 — selecting item slot={} mode={}", slot1, mode);
+        interaction.selectItem(slot1);
+        pendingSlot2 = slot2;
+        state = State.SELECTING;
+        ticksWaited = 0;
+    }
+
+    /** Tick 2 of 2 — use the already-selected item on the target slot. */
+    private void finishSelection()
+    {
+        if (pendingSlot2 == -1) { state = State.FLETCHING; return; }
+        log.info("Tick 2/2 — using on target slot={}", pendingSlot2);
+        interaction.useSelectedItemOn(pendingSlot2);
+        pendingSlot2 = -1;
         state = State.WAIT_DIALOGUE;
         ticksWaited = 0;
     }
@@ -172,15 +200,31 @@ public class FletchingScript extends BotScript
     private void waitForDialogue()
     {
         ticksWaited++;
+        // Try the standard make-X widget (270,14) first
         Widget makeAll = client.getWidget(270, 14);
         if (makeAll != null && !makeAll.isHidden())
         {
+            log.info("Make-All widget found at (270,14) — clicking");
             interaction.clickWidget(MAKE_ALL_WIDGET);
-            antiban.reactionDelay();
             state = State.IN_PROGRESS;
             return;
         }
-        if (ticksWaited > 5) state = State.FLETCHING;
+        // Dump nearby widgets every 2 ticks so we can find the real ID in logs
+        if (ticksWaited % 2 == 0)
+        {
+            log.info("WAIT_DIALOGUE tick={} — widget(270,14)={}", ticksWaited, makeAll);
+            // Check a few other candidate widget groups for make-x
+            for (int group : new int[]{ 270, 309, 162 })
+            {
+                for (int child : new int[]{ 14, 13, 17, 28, 2 })
+                {
+                    Widget w = client.getWidget(group, child);
+                    if (w != null && !w.isHidden())
+                        log.info("  visible widget ({},{}) text='{}'", group, child, w.getText());
+                }
+            }
+        }
+        if (ticksWaited > 8) { log.warn("Dialogue timeout — retrying"); state = State.FLETCHING; }
     }
 
     private void checkProgress()
@@ -188,11 +232,13 @@ public class FletchingScript extends BotScript
         boolean hasWork;
         switch (mode)
         {
-            case KNIFE:  hasWork = findLog() != -1;         break;
-            case STRING: hasWork = findUnstrungBow() != -1; break;
-            case DARTS:  hasWork = findDartTip() != -1;     break;
-            case BOLTS:  hasWork = findBoltTip() != -1;     break;
-            default:     hasWork = false;
+            case KNIFE:   hasWork = findLog() != -1;                                           break;
+            case STRING:  hasWork = findUnstrungBow() != -1;                                   break;
+            case ARROWS:  hasWork = inventory.contains(ARROW_SHAFT_ID)
+                                 && inventory.contains(FEATHER_ID);                            break;
+            case DARTS:   hasWork = findDartTip() != -1;                                       break;
+            case BOLTS:   hasWork = findBoltTip() != -1;                                       break;
+            default:      hasWork = false;
         }
         if (!hasWork) { state = bankingMode ? State.BANKING : State.DONE; return; }
         if (players.isIdle()) { antiban.randomDelay(300, 700); state = State.FLETCHING; }
@@ -212,6 +258,11 @@ public class FletchingScript extends BotScript
             {
                 for (int id : UNSTRUNG_BOW_IDS) { if (bank.contains(id)) { bank.withdraw(id, Integer.MAX_VALUE); break; } }
                 if (bank.contains(BOW_STRING_ID)) bank.withdraw(BOW_STRING_ID, Integer.MAX_VALUE);
+            }
+            else if (mode == Mode.ARROWS)
+            {
+                if (bank.contains(ARROW_SHAFT_ID)) bank.withdraw(ARROW_SHAFT_ID, Integer.MAX_VALUE);
+                if (bank.contains(FEATHER_ID)) bank.withdraw(FEATHER_ID, Integer.MAX_VALUE);
             }
             else if (mode == Mode.DARTS)
             {

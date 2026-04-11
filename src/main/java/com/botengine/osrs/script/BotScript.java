@@ -84,6 +84,22 @@ public abstract class BotScript
     protected Log log;
 
     /**
+     * Tick delay counter. When > 0, ScriptRunner skips onLoop() for that many
+     * ticks (decrementing each time). Scripts call setTickDelay() to insert a
+     * human-like pause between state transitions without sleeping the client thread.
+     */
+    private int tickDelay = 0;
+
+    /** Returns true if this script is currently in a tick-delay pause. */
+    public final boolean hasTickDelay() { return tickDelay > 0; }
+
+    /** Called by ScriptRunner each tick when hasTickDelay() is true. */
+    public final void decrementTickDelay() { if (tickDelay > 0) tickDelay--; }
+
+    /** Scripts call this to pause execution for N ticks before the next onLoop(). */
+    protected final void setTickDelay(int ticks) { tickDelay = Math.max(0, ticks); }
+
+    /**
      * Called by ScriptRunner to inject all dependencies before onStart().
      * Scripts never call this directly.
      */

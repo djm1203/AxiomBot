@@ -40,21 +40,21 @@ public class MiningConfigDialog extends ScriptConfigDialog<MiningSettings>
         root.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         AxiomSectionPanel ore = new AxiomSectionPanel("ORE SELECTION");
-        tfRockName = makeTextField("e.g. Iron (overridden by progression)");
+        tfRockName = makeTextField("e.g. Iron (partial match, overridden by progression)");
         ore.addRow("Rock name filter", tfRockName);
-        tfProgression = makeTextField("e.g. 1:Copper,15:Iron,30:Coal,50:Mithril");
+        tfProgression = makeTextField("e.g. 1:Copper,15:Iron,30:Coal");
         ore.addRow("Progression", tfProgression);
         root.add(ore);
 
         AxiomSectionPanel behaviour = new AxiomSectionPanel("BEHAVIOUR");
         cbMode = makeCombo("Power-drop", "Banking");
         behaviour.addRow("Mode", cbMode);
-        cbShiftDrop = makeCheckBox("Shift-drop (faster power-mining)", false);
-        behaviour.addCheckRow("", cbShiftDrop);
-        cbHopOnCompetition = makeCheckBox("World hop on competition", false);
-        behaviour.addCheckRow("", cbHopOnCompetition);
-        cbMotherlode = makeCheckBox("Motherlode Mine mode", false);
-        behaviour.addCheckRow("", cbMotherlode);
+        cbShiftDrop = makeCheckBox("", false);
+        behaviour.addCheckRow("Shift-drop (faster power-mining)", cbShiftDrop);
+        cbHopOnCompetition = makeCheckBox("", false);
+        behaviour.addCheckRow("World hop on competition", cbHopOnCompetition);
+        cbMotherlode = makeCheckBox("", false);
+        behaviour.addCheckRow("Motherlode Mine mode", cbMotherlode);
         root.add(behaviour);
 
         return root;
