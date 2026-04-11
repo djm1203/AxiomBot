@@ -364,10 +364,13 @@ src/
 
 ## Docs
 
-- [docs/architecture.md](docs/architecture.md) — deep dive: game tick loop, `client.menuAction()` parameter reference, state machine pattern, DI model, widget IDs
-- [docs/testing-guide.md](docs/testing-guide.md) — step-by-step: credentials setup, deploy, launch, per-script test cases, common issues
-- [docs/packaging.md](docs/packaging.md) — plan for packaging Axiom as a Windows .exe installer
-- [docs/production-gaps.md](docs/production-gaps.md) — missing features vs TriBot/DreamBot/RuneMate
+- [docs/architecture.md](docs/architecture.md) — full system architecture, module structure, API reference
+- [docs/roadmap.md](docs/roadmap.md) — phased build plan, Phase 1 through 5
+- [docs/script-development.md](docs/script-development.md) — how to write a new script
+- [docs/launcher.md](docs/launcher.md) — standalone launcher architecture (Phase 3)
+- [docs/industry-landscape.md](docs/industry-landscape.md) — TRiBot/PowBot/DreamBot reference
+- [docs/testing-guide.md](docs/testing-guide.md) — deploy, test, validate
+- [docs/packaging.md](docs/packaging.md) — Windows .exe installer plan
 
 ---
 

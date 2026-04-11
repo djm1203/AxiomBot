@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.axiom</groupId>
+        <artifactId>axiom</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>axiom-plugin</artifactId>
+    <name>Axiom Plugin</name>
+
+    <dependencies>
+        <!-- API contract — plugin implements the interfaces scripts depend on -->
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-api</artifactId>
+        </dependency>
+
+        <!--
+            Phase 1: woodcutting classes bundled into plugin JAR so ScriptLoader
+            can find them on the classpath. Phase 2: remove this — scripts load via URLClassLoader.
+        -->
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-woodcutting</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- RuneLite — provided at runtime, never bundled -->
+        <dependency>
+            <groupId>net.runelite</groupId>
+            <artifactId>client</artifactId>
+        </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- MigLayout for config dialogs -->
+        <dependency>
+            <groupId>com.miglayout</groupId>
+            <artifactId>miglayout-swing</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                Shade — produces a fat JAR containing:
+                  - axiom-plugin classes
+                  - axiom-api classes
+                  - axiom-woodcutting classes (Phase 1 only)
+                  - MigLayout
+
+                Excludes RuneLite (provided at runtime) and Lombok (annotation processor).
+                The output JAR is deployed to ~/.runelite/sideloaded-plugins/
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>shade</goal></goals>
+                        <configuration>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>net.runelite:*</exclude>
+                                    <exclude>org.projectlombok:*</exclude>
+                                    <!-- Exclude transitive RuneLite dependencies -->
+                                    <exclude>com.google.inject:*</exclude>
+                                    <exclude>com.google.guava:*</exclude>
+                                    <exclude>com.google.code.gson:*</exclude>
+                                    <exclude>org.slf4j:*</exclude>
+                                    <exclude>ch.qos.logback:*</exclude>
+                                </excludes>
+                            </artifactSet>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

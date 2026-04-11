@@ -5,185 +5,111 @@
              http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.botengine</groupId>
-    <artifactId>bot-engine-osrs</artifactId>
+    <groupId>com.axiom</groupId>
+    <artifactId>axiom</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
+    <name>Axiom — Parent</name>
+
+    <modules>
+        <module>axiom-api</module>
+        <module>axiom-plugin</module>
+        <module>axiom-scripts</module>
+    </modules>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <runelite.version>1.12.23</runelite.version>
-        <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
-        <!-- Sentry DSN — override with -Daxiom.sentry.dsn=... or env AXIOM_SENTRY_DSN -->
-        <axiom.sentry.dsn></axiom.sentry.dsn>
     </properties>
 
     <repositories>
-        <!-- RuneLite's own Maven repository -->
         <repository>
             <id>runelite</id>
             <url>https://repo.runelite.net</url>
         </repository>
     </repositories>
 
-    <dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <!-- axiom-api — shared contract imported by plugin and all scripts -->
+            <dependency>
+                <groupId>com.axiom</groupId>
+                <artifactId>axiom-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
-        <!-- RuneLite client — provided at runtime by RuneLite itself -->
-        <dependency>
-            <groupId>net.runelite</groupId>
-            <artifactId>client</artifactId>
-            <version>${runelite.version}</version>
-            <scope>provided</scope>
-        </dependency>
+            <!-- RuneLite client — provided at runtime by RuneLite itself -->
+            <dependency>
+                <groupId>net.runelite</groupId>
+                <artifactId>client</artifactId>
+                <version>${runelite.version}</version>
+                <scope>provided</scope>
+            </dependency>
 
-        <!-- Lombok — reduces boilerplate (@Data, @Slf4j, @Getter, etc.) -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.30</version>
-            <scope>provided</scope>
-        </dependency>
+            <!-- Lombok — boilerplate reduction; provided (annotation processor only) -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>1.18.30</version>
+                <scope>provided</scope>
+            </dependency>
 
-        <!-- ── TEST DEPENDENCIES ───────────────────────────────────── -->
+            <!-- MigLayout — Swing form layout for config dialogs -->
+            <dependency>
+                <groupId>com.miglayout</groupId>
+                <artifactId>miglayout-swing</artifactId>
+                <version>11.4.2</version>
+            </dependency>
 
-        <!-- JUnit 5 -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>5.10.1</version>
-            <scope>test</scope>
-        </dependency>
+            <!-- JUnit 5 -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>5.10.1</version>
+                <scope>test</scope>
+            </dependency>
 
-        <!-- Mockito -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <version>5.7.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- MigLayout — form-style layout manager for script config dialogs -->
-        <dependency>
-            <groupId>com.miglayout</groupId>
-            <artifactId>miglayout-swing</artifactId>
-            <version>11.4.2</version>
-        </dependency>
-
-    </dependencies>
+            <!-- Mockito -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
+                <version>5.7.0</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
-        <!-- Filter version.properties so ${project.version} gets substituted -->
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
+        <pluginManagement>
+            <plugins>
+                <!-- Compiler — enforce Java 11 for all modules -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.11.0</version>
+                    <configuration>
+                        <source>11</source>
+                        <target>11</target>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>1.18.30</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
 
-        <plugins>
-
-            <!-- Compiler — enforce Java 11 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
-                <configuration>
-                    <source>11</source>
-                    <target>11</target>
-                    <annotationProcessorPaths>
-                        <!-- Lombok annotation processor -->
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>1.18.30</version>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
-            </plugin>
-
-            <!-- Surefire — run JUnit 5 tests with mvn test -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.2</version>
-            </plugin>
-
-            <!-- Shade — packages our code into a fat jar for side-loading -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.1</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <!-- Don't bundle RuneLite — it's provided at runtime -->
-                            <artifactSet>
-                                <excludes>
-                                    <exclude>net.runelite:*</exclude>
-                                    <exclude>org.projectlombok:*</exclude>
-                                </excludes>
-                            </artifactSet>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-        </plugins>
+                <!-- Surefire — run JUnit 5 for all modules -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.2</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
     </build>
-
-    <!-- ── Release profile: obfuscates the shaded JAR with ProGuard ──────────────
-         Usage: mvn package -Prelease
-         Output: target/bot-engine-osrs-<version>-obfuscated.jar
-    ─────────────────────────────────────────────────────────────────────────── -->
-    <profiles>
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>com.github.wvengen</groupId>
-                        <artifactId>proguard-maven-plugin</artifactId>
-                        <version>2.6.0</version>
-                        <executions>
-                            <execution>
-                                <phase>package</phase>
-                                <goals><goal>proguard</goal></goals>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <proguardVersion>7.5.0</proguardVersion>
-                            <!-- Read the shaded JAR, write a separate obfuscated output -->
-                            <injar>${project.build.finalName}.jar</injar>
-                            <outjar>${project.build.finalName}-obfuscated.jar</outjar>
-                            <obfuscate>true</obfuscate>
-                            <proguardInclude>${project.basedir}/proguard.conf</proguardInclude>
-                            <!-- RuneLite provided at runtime — needed for reference resolution -->
-                            <!-- RuneLite provided deps are added automatically by the plugin.
-                                 JDK jmod libs are not needed because proguard.conf uses
-                                 -dontwarn/-dontnote/-dontoptimize/-dontpreverify. -->
-                        </configuration>
-                        <dependencies>
-                            <dependency>
-                                <groupId>com.guardsquare</groupId>
-                                <artifactId>proguard-base</artifactId>
-                                <version>7.5.0</version>
-                            </dependency>
-                            <dependency>
-                                <groupId>com.guardsquare</groupId>
-                                <artifactId>proguard-core</artifactId>
-                                <version>9.1.6</version>
-                            </dependency>
-                        </dependencies>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 
 </project>

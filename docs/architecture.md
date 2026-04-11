@@ -1,224 +1,328 @@
-# Architecture Reference
-
-Deep-dive into how the Bot Engine works internally. Useful when rebuilding from scratch.
+# Axiom — Architecture Overview
+> Status: Active reference | Last updated: April 2026
+> Replaces: docs/01_architecture_research.md, docs/03_project_structure.md
 
 ---
 
-## The game tick loop
+## What Axiom is
 
-OSRS runs on a 600ms server tick. Everything in the game — movement, animations, combat — advances one step per tick.
+Axiom is a long-term OSRS bot platform built on RuneLite. It is structured as
+three distinct products that are built in phases:
 
-RuneLite fires a `GameTick` event on its EventBus every tick. `ScriptRunner` subscribes to this:
+```
+┌─────────────────────────────────────────────────────────┐
+│                   AXIOM LAUNCHER                        │
+│              Standalone desktop app (Java)              │
+│                                                         │
+│  • Account manager (SQLite, AES-encrypted credentials)  │
+│  • Proxy manager                                        │
+│  • Script library browser                               │
+│  • Spawn/kill RuneLite instances per account            │
+│  • Per-instance config: script, world, proxy, heap      │
+│  • Session monitoring dashboard                         │
+│  • CLI for headless/bulk launch (like TRiBot CLI)       │
+└──────────────────────┬──────────────────────────────────┘
+                       │ spawns instances via subprocess
+                       │ passes --axiom-script etc. as args
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│              RUNELITE + AXIOM PLUGIN                    │
+│         Sideloaded plugin JAR, one per instance         │
+│                                                         │
+│  • Reads launch args from LauncherBridge                │
+│  • ScriptLoader discovers available script JARs         │
+│  • ScriptRunner manages the tick loop + state machine   │
+│  • Exposes full API layer to scripts                    │
+│  • AxiomPanel: status display + manual script launch    │
+└──────────────────────┬──────────────────────────────────┘
+                       │ loads at runtime via URLClassLoader
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│                  SCRIPT JARs                            │
+│    Separate Maven modules, loaded from disk at runtime  │
+│                                                         │
+│  ~/.axiom/scripts/axiom-woodcutting.jar                 │
+│  ~/.axiom/scripts/axiom-mining.jar                      │
+│  ~/.axiom/scripts/axiom-agility.jar                     │
+│  (future: community scripts downloaded from repo)       │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Industry Context (April 2026)
+
+Jagex shut down the Legacy Java Client on January 28, 2026. Every bot built on
+Java injection (DreamBot, OSBot, RuneMate) lost its attack surface overnight.
+
+The two surviving approaches:
+
+**RuneLite plugin approach (Axiom, TRiBot Echo)**
+- Run the bot engine as a RuneLite sideloaded plugin
+- Access game state via RuneLite's clean injected API
+- Appears as vanilla RuneLite to Jagex's detection
+- TRiBot Echo uses this exact architecture
+
+**Native client approach (PowBot)**
+- Built in Rust, hooks into the official C++ OSRS client
+- Completely independent of RuneLite or Java
+- Supports mobile (Android) botting
+- Scripted in Lua
+- Different attack surface, not replicable without years of work
+
+Axiom is correctly positioned on the RuneLite approach. This is the right
+long-term architecture given the January 2026 client shutdown.
+
+---
+
+## Maven Module Structure
+
+```
+axiom/                          ← parent POM
+├── axiom-api/                  ← shared contract layer
+├── axiom-plugin/               ← RuneLite plugin engine
+├── axiom-launcher/             ← standalone launcher app (Phase 3)
+└── axiom-scripts/
+    ├── axiom-woodcutting/
+    ├── axiom-mining/
+    ├── axiom-agility/
+    └── ... (one module per script)
+```
+
+Dependency rules:
+- `axiom-api` has NO RuneLite dependency — it's pure Java
+- `axiom-plugin` depends on `axiom-api` + RuneLite as `provided`
+- Each script module depends on `axiom-api` only (NOT `axiom-plugin`)
+- `axiom-launcher` depends on nothing from the bot engine — it just spawns processes
+
+---
+
+## API Layer (`axiom-api`)
+
+Scripts import ONLY from `com.axiom.api.*`. Never `net.runelite.api.*`.
+
+```
+com.axiom.api/
+├── script/
+│   ├── BotScript.java          abstract: getName/onStart/onLoop/onStop
+│   ├── ScriptManifest.java     @annotation: name, version, category, author
+│   ├── ScriptCategory.java     enum: SKILLING, COMBAT, MONEY_MAKING, UTILITY
+│   └── ScriptSettings.java     base class for per-script config
+├── game/
+│   ├── Players.java            local player position, animation, idle detection
+│   ├── Npcs.java               find by name/id, filter, closest
+│   ├── GameObjects.java        find by name/id, filter, closest
+│   ├── GroundItems.java        find by name/id, take action
+│   └── Widgets.java            ★ dialog detection, make-all/make-x, widget clicks
+├── player/
+│   ├── Inventory.java          contains, count, full, empty, use-on, drop
+│   ├── Equipment.java          slot equipped, item name/id
+│   ├── Skills.java             getLevel, getXp, getXpToNextLevel
+│   └── Prayer.java             isActive, activate, points remaining
+├── world/
+│   ├── Bank.java               isOpen, open nearest, deposit, withdraw, close
+│   ├── Movement.java           walkTo, isMoving, distanceTo
+│   ├── Camera.java             rotate toward tile/entity
+│   └── WorldHopper.java        hop world, hop to low-pop
+├── interaction/
+│   ├── Interaction.java        click entity, menu action
+│   └── Menu.java               explicit menu action by option + target string
+└── util/
+    ├── Antiban.java            tick delays, Gaussian random, break scheduling,
+    │                           fatigue curve, ABC2 account seed
+    ├── Pathfinder.java         ★ obstacle-aware walkTo (doors, stairs, gates)
+    ├── Time.java               sleep, sleepUntil(condition, timeout), elapsed
+    └── Log.java                info/warn/error with script name prefix
+```
+
+★ = critical new additions that fix previous script failures
+
+### Widgets.java — why this exists
+
+The old codebase had every script handle dialogs ad-hoc. This is why Fletching
+and Cooking broke — different widget IDs, inconsistent click timing.
+
+`Widgets.java` centralizes all dialog handling:
+```java
+Widgets.isMakeDialogOpen()          // detect make-all/make-x dialog
+Widgets.clickMakeAll()              // click "Make All"
+Widgets.clickMakeX(int quantity)    // click "Make X" + type quantity
+Widgets.isDialogOpen(int groupId)   // generic widget group check
+Widgets.clickDialogOption(String text)  // click option by text
+```
+
+### Pathfinder.java — why this exists
+
+Agility and Thieving both require navigating through obstacles. Without
+obstacle-aware pathfinding, scripts silently fail at any door/gate/staircase.
+
+`Pathfinder.java` wraps RuneLite's collision map or the ShortestPath plugin:
+```java
+Pathfinder.walkTo(WorldPoint destination)   // handles obstacles automatically
+Pathfinder.isReachable(WorldPoint point)    // check before walking
+```
+
+---
+
+## Plugin Layer (`axiom-plugin`)
+
+```
+com.axiom.plugin/
+├── AxiomPlugin.java        @PluginDescriptor entry, wires Guice, reads launcher args
+├── ScriptRunner.java       tick loop, STOPPED/RUNNING/PAUSED/BREAKING state machine
+├── ScriptLoader.java       discovers @ScriptManifest scripts from classpath + JARs
+├── LauncherBridge.java     reads --axiom-script, --axiom-world, etc. from args
+└── ui/
+    ├── AxiomPanel.java     script list (from ScriptLoader), Start/Stop/Pause
+    └── AxiomTheme.java     colors, fonts
+```
+
+### ScriptManifest — replaces hardcoded panel
+
+Old approach (broken at scale):
+```java
+// AxiomPanel had 13 @Inject parameters, one per script
+public AxiomPanel(CombatScript combat, WoodcuttingScript woodcutting, ...)
+```
+
+New approach:
+```java
+// Each script declares itself via annotation
+@ScriptManifest(name = "Axiom Woodcutting", category = SKILLING, version = "1.0")
+public class WoodcuttingScript extends BotScript { ... }
+
+// ScriptLoader discovers all annotated classes — panel never hardcodes scripts
+List<BotScript> scripts = ScriptLoader.discoverScripts();
+```
+
+Adding a new script = add the JAR to ~/.axiom/scripts/. Zero changes to the plugin.
+
+### ScriptRunner state machine
+
+```
+STOPPED ──start()──► RUNNING ──shouldBreak()──► BREAKING ──breakOver()──► RUNNING
+                        │                                                      │
+                   onGameTick()                                           onGameTick()
+                   calls onLoop()                                       (waits)
+                        │
+                   logout detected
+                        ▼
+                     PAUSED ──login detected──► RUNNING
+```
+
+---
+
+## Script Layer (`axiom-scripts/*`)
+
+Each script is a separate Maven module that produces a standalone JAR.
+
+Script structure (per script):
+```
+axiom-woodcutting/
+└── src/main/java/com/axiom/scripts/woodcutting/
+    ├── WoodcuttingScript.java       extends BotScript, @ScriptManifest
+    ├── WoodcuttingSettings.java     extends ScriptSettings
+    └── WoodcuttingConfigDialog.java extends ScriptConfigDialog (in axiom-plugin)
+```
+
+### Script rules
+
+1. NEVER import `net.runelite.api.*` — only `com.axiom.api.*`
+2. No raw `Thread.sleep()` — use `Time.sleepUntil()`
+3. Each script is a state machine — no blocking loops inside `onLoop()`
+4. All timing goes through `Antiban` or `Time`
+5. Target entities (trees, rocks, fish spots) defined as data (enums), not strings
+
+### Agility — course-as-data pattern
+
+Agility courses are data arrays, not logic. Adding a course = adding an array.
 
 ```java
-@Subscribe
-public void onGameTick(GameTick event) {
-    // called every ~600ms
-    if (state == RUNNING) {
-        activeScript.onLoop();
-    }
+public class AgilityObstacle {
+    int[] objectIds;     // RuneLite IDs for this obstacle
+    String action;       // "Walk-on", "Climb-over", etc.
+    WorldPoint standHere; // where to stand to click it
+    WorldPoint endsAt;   // where player ends up after completion
+    int animationId;     // animation that plays during completion
 }
-```
 
-Scripts **must return quickly** from `onLoop()`. Sleeping inside `onLoop()` would block the entire RuneLite event thread. Instead, scripts check state and fire one action per tick, then return.
+// Gnome Stronghold course:
+static final AgilityObstacle[] GNOME = {
+    new AgilityObstacle(new int[]{23145}, "Walk-on",   point(2474,3436), point(2474,3430), 762),
+    new AgilityObstacle(new int[]{23134}, "Climb-over", point(2476,3430), point(2476,3424), 762),
+    // ...
+};
 
----
-
-## How `client.menuAction()` works
-
-Every interaction in OSRS is a menu entry — left-clicking a tree, right-clicking an NPC, clicking a spell. The game processes these as menu entries even if the menu is never shown.
-
-RuneLite 1.12.23 exposes:
-```java
-client.menuAction(p0, p1, MenuAction action, int id, int itemId, String option, String target)
-```
-
-Parameters by interaction type:
-
-| Interaction | p0 | p1 | action | id | itemId | option | target |
-|-------------|----|----|--------|----|--------|--------|--------|
-| Click tree | sceneX | sceneY | GAME_OBJECT_FIRST_OPTION | objectId | -1 | "Chop down" | "Tree" |
-| Attack NPC | -1 | npc.getIndex() | NPC_FIRST_OPTION | npc.getIndex() | -1 | "Attack" | npc name |
-| Click fishing spot | -1 | npc.getIndex() | NPC_FIRST_OPTION | npc.getIndex() | -1 | "Lure" | "Fishing spot" |
-| Drop item | slot | INVENTORY_id | CC_OP | 7 | itemId | "Drop" | "" |
-| Cast spell | -1 | widgetId | CC_OP | 1 | -1 | "Cast" | "" |
-| Walk to tile | sceneX | sceneY | WALK | 0 | -1 | "Walk here" | "" |
-
-**Key distinctions:**
-- For **NPC interactions**: p0=`-1` (unused), p1=`npc.getIndex()`, id=`npc.getIndex()`. The NPC index (slot in the server NPC table) goes in BOTH p1 and id. Using `0,0` for p0/p1 causes the action to be silently rejected.
-- `NPC_FIRST_OPTION` = the left-click (default) action. For combat monsters, this is "Attack". For fishing spots this is "Lure"/"Bait"/etc.
-- `NPC_SECOND_OPTION` = first right-click option. Only needed when Attack is NOT the default left-click action.
-- For **game objects**: p0=sceneX, p1=sceneY (tile coordinates), id=`obj.getId()` (the type ID, not an index).
-- NPC interactions use `npc.getIndex()` (slot in the NPC table), **not** `npc.getId()` (the NPC type/template ID).
-- `menuAction()` sends a direct server packet — **the mouse cursor does not move**. This is correct and expected behavior.
-
----
-
-## State machine pattern
-
-Every script is a state machine. `onLoop()` reads the current state and handles one case:
-
-```
-FIND_TREE → (click tree) → CHOPPING
-CHOPPING  → (player idle) → FIND_TREE
-CHOPPING  → (inventory full) → DROPPING
-DROPPING  → (inventory empty) → FIND_TREE
-```
-
-Why state machines?
-- Each `onLoop()` call is one tick — you can only do one thing
-- State persists between ticks (stored as an instance field)
-- Transitions are explicit and testable
-
-Anti-pattern to avoid: branching on multiple conditions in a single `onLoop()`. If you need to check inventory AND find a target AND click it, those should be three separate states.
-
----
-
-## Antiban system
-
-### Delays
-All delays are Gaussian (bell curve) rather than uniform random. This matches human reaction time distribution — most reactions cluster near the mean with occasional outliers.
-
-```java
-// 650ms ± 80ms, clamped to [260ms, 1300ms]
-antiban.gaussianDelay(650, 80)
-
-// 150ms ± 40ms reaction delay (simulates human "noticing" something)
-antiban.reactionDelay()
-```
-
-### Break scheduling
-The break interval itself is also Gaussian:
-- Target: every 45 minutes (configurable)
-- Variance: ±20% of the interval
-- Minimum: 5 minutes (hard floor to prevent immediate breaks)
-
-When `shouldTakeBreak()` returns true, ScriptRunner transitions to `BREAKING` state. The script doesn't run until `isBreakOver()` returns true, then resumes automatically.
-
-### Mouse jitter
-Click coordinates get a Gaussian offset:
-```java
-// Adds ±3px (configurable) to any click target
-antiban.mouseJitter(point)
-```
-
-### Bezier mouse paths
-For future use — generates a curved path between two screen points rather than a straight line. Control point is randomly offset from the midpoint.
-
----
-
-## Dependency injection
-
-RuneLite uses Google Guice for DI. The plugin root (`BotEnginePlugin`) is constructed by RuneLite's injector.
-
-Scripts can't use Guice directly because they're created via `Provider.get()` (which re-constructs the object each time Start is pressed). Instead:
-
-1. `BotEnginePanel` holds `Provider<WoodcuttingScript>` etc. (injected by Guice)
-2. On Start, it calls `provider.get()` to create a fresh script instance
-3. `ScriptRunner.start(script)` calls `script.inject(client, api..., util...)` 
-4. Script's protected fields are set — it can now use `players.isIdle()`, `interaction.click(...)`, etc.
-
----
-
-## Widget IDs
-
-RuneLite uses packed widget IDs: `(interfaceId << 16) | componentId`
-
-Helper: `WidgetUtil.packComponentId(interfaceId, componentId)`
-
-Important IDs:
-```java
-// High Alchemy spell (Magic spellbook interface 218, component 48)
-WidgetUtil.packComponentId(218, 48)
-
-// Make-All button on production interface (interface 270, component 14)
-WidgetUtil.packComponentId(270, 14)
-
-// Bank interface: isOpen check = client.getWidget(12, 0)
-// Deposit All button = client.getWidget(12, 42)
+// Engine iterates the array — same code runs every course
 ```
 
 ---
 
-## Object/NPC identification
+## Launcher (`axiom-launcher`) — Phase 3
 
-GameObjects don't have names on the object itself. You must query the definition:
-```java
-String name = client.getObjectDefinition(obj.getId()).getName();
-// Returns ObjectComposition, not ObjectDefinition
+Not built yet. Architecture is decided:
+
+**Tech:** Java with JavaFX UI. SQLite (via JDBC) for local storage.
+
+**Data model:**
+```sql
+accounts (id, display_name, jagex_session_id, jagex_character_id,
+          legacy_username, legacy_password_encrypted, bank_pin_encrypted,
+          preferred_world, proxy_id)
+
+proxies  (id, name, host, port, username, password_encrypted)
+
+sessions (id, account_id, script_name, started_at, ended_at,
+          status, xp_gained, gp_gained)
 ```
 
-NPC names come directly from the NPC:
-```java
-String name = npc.getName(); // may be null
+**How it spawns instances:**
+```bash
+java -jar runelite-shaded.jar --developer-mode \
+     -Daxiom.script="Axiom Woodcutting"        \
+     -Daxiom.world=302                          \
+     -Daxiom.account.id=<jagex_character_id>
 ```
 
-`TileItem` (ground items) only exposes `getId()` and `getQuantity()`. To pick it up, you need the tile it's on:
-```java
-// From Tile.getGroundItems():
-for (TileItem item : tile.getGroundItems()) {
-    interaction.click(item, tile); // tile must be passed explicitly
-}
-```
+`LauncherBridge.java` in the plugin reads these system properties on startup
+and auto-starts the specified script.
 
----
-
-## Testing strategy
-
-Tests mock the RuneLite `Client` and api/ objects using Mockito. Scripts call their injected api/ mocks, and tests verify the mocks received the right calls.
-
-Key patterns used:
-```java
-// Verify the right menuAction was fired
-verify(client).menuAction(eq(10), eq(20), eq(MenuAction.GAME_OBJECT_FIRST_OPTION), ...);
-
-// Build Item arrays BEFORE any when() chain (avoids nested stubbing issues)
-Item[] items = makeItems(1511, 561);  // build first
-when(container.getItems()).thenReturn(items);  // then stub
-
-// Use LENIENT strictness when setUp() stubs are only needed by some tests
-@MockitoSettings(strictness = Strictness.LENIENT)
+**CLI target (like TRiBot CLI):**
+```bash
+axiom run --account "myaccount" --script "Axiom Woodcutting" --world 302
+axiom bulk-launch --file accounts.csv
+axiom accounts import --file accounts.csv
+axiom proxies import --file proxies.csv
 ```
 
 ---
 
-## RuneLite plugin lifecycle
+## Build Commands
+
+```bash
+# Build everything
+mvn package -DskipTests
+
+# Build release (obfuscated)
+mvn package -Prelease -DskipTests
+
+# Deploy plugin to RuneLite
+cp axiom-plugin/target/axiom-plugin-*.jar ~/.runelite/sideloaded-plugins/
+
+# Deploy a script JAR
+cp axiom-scripts/axiom-woodcutting/target/axiom-woodcutting-*.jar ~/.axiom/scripts/
+
+# Launch RuneLite in dev mode
+java -ea -jar <runelite-shaded.jar> --developer-mode
+```
+
+---
+
+## Deployment flow
 
 ```
-RuneLite starts
-  → Guice injector creates BotEnginePlugin
-  → BotEnginePlugin.startUp() called:
-      antiban.setBreakInterval(config.breakInterval())
-      eventBus.register(scriptRunner)      ← ScriptRunner now receives GameTick
-      overlayManager.add(botOverlay)
-      overlayManager.add(debugOverlay)     ← only if config.debugOverlay()
-      clientToolbar.addNavigation(navButton)
-
-User presses Start in panel:
-  → provider.get() creates fresh script instance
-  → scriptRunner.start(script)
-      script.inject(...)                   ← sets all api/util fields
-      script.onStart()
-      antiban.reset()
-      state = RUNNING
-
-Every 600ms:
-  → GameTick event fires
-  → scriptRunner.onGameTick()
-      antiban.shouldTakeBreak() ?
-        yes → state = BREAKING, antiban.startBreak()
-      state == RUNNING → script.onLoop()
-      state == BREAKING → antiban.isBreakOver() → state = RUNNING
-
-User presses Stop:
-  → scriptRunner.stop()
-      script.onStop()
-      state = STOPPED
-
-RuneLite shuts down:
-  → BotEnginePlugin.shutDown()
-      scriptRunner.stop()
-      eventBus.unregister(scriptRunner)
-      overlayManager.remove(...)
-      clientToolbar.removeNavigation(navButton)
+mvn package
+    → axiom-plugin.jar      → ~/.runelite/sideloaded-plugins/
+    → axiom-woodcutting.jar → ~/.axiom/scripts/
+    → (future) axiom-launcher.jar → installed as standalone app
 ```

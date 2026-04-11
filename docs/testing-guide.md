@@ -1,167 +1,164 @@
 # Testing Guide
-
-How to load and test the Bot Engine plugin in RuneLite.
+> Status: Reference | Last updated: April 2026
 
 ---
 
 ## Prerequisites
 
-- RuneLite source cloned to `Personal/Github/runelite/` (Gradle-based, tag `1.12.23`)
-- Java 11+ on your PATH
-- Maven 3.x on your PATH
-- Bot Engine JAR built: `mvn clean package` in the project root
+- Java 11+ on PATH
+- Maven 3.x on PATH
+- RuneLite source built from tag `1.12.23` or `1.12.24-SNAPSHOT`
+- Axiom built: `mvn clean package -DskipTests` from project root
 
-The fat JAR will be at:
-```
-target/bot-engine-osrs-1.0-SNAPSHOT.jar
+---
+
+## Building
+
+```bash
+# Build all modules
+mvn clean package -DskipTests
+
+# Outputs:
+#   axiom-plugin/target/axiom-plugin-*.jar    → deploy to RuneLite
+#   axiom-scripts/axiom-woodcutting/target/axiom-woodcutting-*.jar → deploy to scripts dir
 ```
 
 ---
 
-## Running the client with developer mode
-
-Developer mode is required for sideloaded plugins to load. The Jagex Launcher blocks developer mode by setting a system property, so you must run the source-built client directly.
-
-### One-time setup: get Jagex credentials on disk
-
-The source-built client needs credentials from your logged-in Jagex account. Do this once:
-
-1. **Set the `RUNELITE_ARGS` environment variable permanently:**
-   ```powershell
-   [System.Environment]::SetEnvironmentVariable('RUNELITE_ARGS', '--insecure-write-credentials', 'User')
-   ```
-
-2. **Restart the Jagex Launcher** (close fully from system tray), then launch OSRS normally. RuneLite will write your session to `~/.runelite/credentials.properties`.
-
-3. **Verify the file was created:**
-   ```powershell
-   cat "$HOME/.runelite/credentials.properties"
-   ```
-   Should show `JX_SESSION_ID`, `JX_CHARACTER_ID`, `JX_DISPLAY_NAME`.
-
-You only need to do this once. The credentials.properties file persists between sessions (re-run step 2 when the session expires and you get login errors).
-
-### Deploying the plugin
-
-Copy the JAR to the sideloaded-plugins directory (RuneLite scans this on startup):
-```bash
-cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
-```
-
-### Launching the client
+## Deploying
 
 ```bash
-java -ea -jar "C:\Users\dmart\Documents\Personal\Github\runelite\runelite-client\build\libs\client-1.12.24-SNAPSHOT-shaded.jar" --developer-mode
+# 1. Deploy plugin
+cp axiom-plugin/target/axiom-plugin-*.jar ~/.runelite/sideloaded-plugins/
+
+# 2. Deploy script JARs
+mkdir -p ~/.axiom/scripts
+cp axiom-scripts/axiom-woodcutting/target/axiom-woodcutting-*.jar ~/.axiom/scripts/
+
+# 3. Launch RuneLite in developer mode
+java -ea -jar "<path-to-runelite-shaded.jar>" --developer-mode
 ```
 
-The log should show:
+Log should show:
 ```
-Side-loading plugin ...bot-engine-osrs-1.0-SNAPSHOT.jar
-Bot Engine ready
+Side-loading plugin ...axiom-plugin-*.jar
+Axiom ready — loaded N scripts
 ```
 
-If you see `read N credentials from disk`, the Jagex session was loaded successfully and you should be logged in.
+If N = 0, ScriptLoader failed to find scripts — check ~/.axiom/scripts/ has JARs.
+
+---
+
+## Credentials (one-time setup)
+
+```powershell
+# Set env var, then launch OSRS via Jagex Launcher once to write credentials
+[System.Environment]::SetEnvironmentVariable('RUNELITE_ARGS', '--insecure-write-credentials', 'User')
+```
+
+Verify: `cat "$HOME/.runelite/credentials.properties"` — should show JX_SESSION_ID etc.
+
+---
+
+## Running tests
+
+```bash
+# All tests
+mvn test
+
+# Specific module
+mvn test -pl axiom-plugin
+
+# Specific class
+mvn test -Dtest=ScriptRunnerTest
+
+# With output
+mvn test -Dtest=WoodcuttingScriptTest --info
+```
+
+---
+
+## In-game validation checklist
+
+Run this against every script before marking it complete.
+
+### Framework checks (run once after Phase 1)
+
+```
+□ Plugin enables without error in RuneLite plugin list
+□ Plugin disables cleanly (no leftover state, no exceptions)
+□ AxiomPanel shows available scripts (loaded from ScriptLoader, not hardcoded)
+□ Adding a new script JAR to ~/.axiom/scripts/ and restarting shows it in panel
+□ ScriptLoader loads @ScriptManifest correctly (name, category, version)
+```
+
+### Per-script checks (run for each script)
+
+```
+□ Script appears in AxiomPanel with correct name and category
+□ Config dialog opens with correct fields
+□ Start button transitions panel to RUNNING state
+□ Overlay shows script name, state, runtime
+□ Script performs correct first action for its state
+□ State transitions work: e.g. FIND_TREE → CHOPPING → BANKING → FIND_TREE
+□ Pause button halts action; Resume resumes from same state
+□ Stop button cleans up and resets to STOPPED
+□ Antiban delays are visible — not instant-clicking every tick
+□ Script handles target-not-found gracefully (doesn't crash, logs warning)
+□ Script handles full inventory correctly (banks or drops, doesn't freeze)
+□ Script handles empty inventory correctly (withdraws or stops, doesn't freeze)
+□ Make-All dialog handled by Widgets.java (not ad-hoc per script)
+□ XP/hr counter on overlay updates correctly
+□ Debug overlay shows correct tile/object highlights
+□ Emergency logout triggers if HP is critical (combat scripts)
+□ Break scheduling fires (wait 30+ min, should see a break taken)
+□ Auto-pause on logout; auto-resume on re-login
+□ Script stops cleanly after 5 consecutive errors
+```
+
+### Agility-specific checks
+
+```
+□ Each obstacle in the course is clicked correctly
+□ Completion detected via animation ID (not just tile position)
+□ Course restarts cleanly after final obstacle lap bonus
+□ Marks of Grace are picked up if configured
+□ Course handles obstacle failure (player pushed back, re-attempts)
+□ Progressive course switching at configured levels
+```
+
+### Pathfinder checks
+
+```
+□ walkTo() correctly navigates through a door
+□ walkTo() correctly navigates up a staircase
+□ walkTo() handles a gate (click to open, walk through)
+□ isReachable() returns false for tiles behind closed obstacles
+```
+
+---
+
+## Common failure modes and fixes
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Script list empty in panel | ScriptLoader not finding JARs | Check ~/.axiom/scripts/ has JARs, check @ScriptManifest annotation |
+| Make-All dialog not clicked | Per-script dialog handling | Move to Widgets.clickMakeAll() |
+| Script freezes at obstacle | No pathfinding | Use Pathfinder.walkTo() not Movement.walkTo() |
+| Script clicks wrong object | ID mismatch | Verify object ID in-game with developer overlay |
+| Script crashes every loop | Exception in onLoop | Check consecutive error counter, look at log |
+| Animation not detected | Wrong animation ID | Use developer overlay to find correct animation ID |
+| Bank not found | Wrong bank object ID | Verify with developer overlay at that bank |
 
 ---
 
 ## After code changes
 
 ```bash
-mvn clean package
-cp target/bot-engine-osrs-1.0-SNAPSHOT.jar ~/.runelite/sideloaded-plugins/
-# Restart the client (full close + re-run the java command)
+mvn clean package -DskipTests
+cp axiom-plugin/target/axiom-plugin-*.jar ~/.runelite/sideloaded-plugins/
+cp axiom-scripts/axiom-<name>/target/*.jar ~/.axiom/scripts/
+# Full close + restart RuneLite
 ```
 
-Maven caches compiled classes — always use `mvn clean package` (not just `mvn package`) after editing source files to guarantee the new code is picked up.
-
----
-
-## Enabling debug overlay
-
-1. Plugin Config → Bot Engine → Debug → enable **"Show debug overlay"**
-2. The overlay shows current script, state, player position, NPC count, tile/NPC bounding boxes
-
-Use this to verify the script is finding targets — if NPC count is 0 when standing next to mobs, the NPC API is broken. If count > 0 but the script isn't attacking, the NPC ID filter is wrong.
-
----
-
-## Reading logs
-
-All bot output goes to the terminal where you launched the client (not the in-game chat). Look for lines prefixed with `BotEngine`:
-
-```
-[BotEngine] Starting script: Combat
-[BotEngine] onLoop state=FIND_TARGET npcsInScene=4
-[BotEngine] FIND_TARGET: nearest=Hill Giant/2099
-[BotEngine] Attacking NPC id=2099 name=Hill Giant
-```
-
-If `onLoop` never appears after starting, the EventBus subscription failed.
-If `FIND_TARGET: nearest=null` appears, the NPC ID is wrong or the mob is out of range.
-
----
-
-## Testing each script
-
-### Combat — Hill Giants (Edgeville dungeon)
-- NPC ID: `2099`
-- Stand next to the giants, have any food in inventory
-- Select Combat → Start
-- The script sends direct `menuAction` packets — **the cursor does not move**, this is correct behavior
-- Verify: attack animation starts, HP bar appears on the giant
-
-### Woodcutting
-- Have an axe in inventory or equipped
-- Stand next to any trees
-- TREE_IDS in WoodcuttingScript: `1276` (regular), `1278` (oak), etc.
-- Verify: chop animation, logs appear, inventory drops when full
-
-### High Alchemy
-- Inventory: nature runes + items to alch, fire runes or fire staff equipped
-- Select Alchemy → Start
-- Should cast every ~1.8 seconds
-
-### Fishing
-- Stand at fishing spots
-- Verify: click on spot, fish accumulate, drop when full
-
-### Mining
-- Stand at ore rocks
-- Verify: mine animation, ore accumulates, rock depletion detected (goes idle, finds new rock)
-
-### Cooking, Smithing, Fletching, Gem Cutting
-- These use the Make-All production dialogue
-- Verify the dialogue opens and "Make All" is clicked
-
----
-
-## Common issues
-
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Plugin not in sidebar | JAR not in sideloaded-plugins or client not in dev mode | Re-copy JAR, re-run with `--developer-mode` |
-| "read 0 credentials from disk" / login screen | credentials.properties missing or expired | Redo the one-time Jagex credentials setup above |
-| Script starts, nothing happens, no logs | onLoop not being called | Verify EventBus.register(scriptRunner) in plugin startup log |
-| `FIND_TARGET: nearest=null` in logs | NPC ID mismatch | Check actual NPC ID with NPC Indicators plugin, update array |
-| Attack called but no animation | Wrong MenuAction type | Combat NPCs: NPC_FIRST_OPTION; some quest NPCs: NPC_SECOND_OPTION |
-| Production dialogue doesn't open | Object/NPC not found | Enable debug overlay, check NPC count and targeting |
-| NullPointerException in logs | Script auto-stopped | Check full stack trace in terminal for the failing line |
-
----
-
-## Finding NPC and object IDs
-
-The fastest method: install RuneLite's **NPC Indicators** plugin, right-click any NPC → "Tag" → hover the tag to see its ID.
-
-For game objects: install **Object Markers** plugin, right-click any object → "Mark" to see the object ID.
-
-Alternative: enable the debug overlay — it shows NPC IDs and tile info for everything near the player.
-
----
-
-## Antiban during testing
-
-With defaults, the first break fires after ~45 minutes. To test the break cycle sooner:
-- Set "Break every" to 1 minute in config
-- Watch for `[BotEngine] Taking antiban break` in logs
-- Script should pause then auto-resume after the break duration
+Always `mvn clean package` (not just `mvn package`) after source changes.
