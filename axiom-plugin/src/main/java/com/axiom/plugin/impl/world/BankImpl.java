@@ -7,7 +7,6 @@ import com.axiom.plugin.impl.game.NpcsImpl;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.MenuAction;
-import net.runelite.api.ObjectComposition;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 
@@ -18,10 +17,9 @@ import javax.inject.Singleton;
 @Singleton
 public class BankImpl implements Bank
 {
-    private static final int BANK_GROUP_ID        = 12;
-    private static final int CLOSE_CHILD_ID       = 2;
-    private static final int DEPOSIT_ALL_CHILD_ID = 42;
-    private static final int ITEMS_CHILD_ID       = 13;
+    private static final int BANK_GROUP_ID  = 12;
+    private static final int CLOSE_CHILD_ID = 2;
+    private static final int ITEMS_CHILD_ID = 13;
 
     private final Client         client;
     private final GameObjectsImpl gameObjects;
@@ -81,13 +79,26 @@ public class BankImpl implements Bank
     @Override
     public void depositAll()
     {
-        Widget btn = client.getWidget(BANK_GROUP_ID, DEPOSIT_ALL_CHILD_ID);
-        if (btn == null || btn.isHidden())
+        int packedId = WidgetInfo.BANK_DEPOSIT_INVENTORY.getId();
+        log.info("[BANKING] depositAll: WidgetInfo.BANK_DEPOSIT_INVENTORY packedId={} (group={} child={})",
+            packedId, packedId >> 16, packedId & 0xFFFF);
+
+        Widget depositBtn = client.getWidget(WidgetInfo.BANK_DEPOSIT_INVENTORY);
+        if (depositBtn == null || depositBtn.isHidden())
         {
-            log.warn("BankImpl: deposit-all button not found");
+            log.warn("[BANKING] deposit widget null/hidden — bank not fully open");
             return;
         }
-        clickWidget(btn);
+
+        log.info("[BANKING] deposit widget found: id={} bounds={}", depositBtn.getId(), depositBtn.getBounds());
+
+        // Pattern: widgetId as param1, id=1 (first action), extra=-1
+        client.menuAction(
+            1, depositBtn.getId(),
+            MenuAction.CC_OP,
+            1, -1,
+            "Deposit inventory", ""
+        );
     }
 
     @Override
@@ -170,15 +181,8 @@ public class BankImpl implements Bank
 
     private SceneObject findNearestBankObject()
     {
-        return gameObjects.nearest(o -> {
-            ObjectComposition def = client.getObjectDefinition(o.getId());
-            if (def == null) return false;
-            for (String action : def.getActions())
-            {
-                if ("Bank".equals(action)) return true;
-            }
-            return false;
-        });
+        // hasAction() uses the impostor-corrected actions cached in SceneObjectWrapper
+        return gameObjects.nearest(o -> o.hasAction("Bank"));
     }
 
     private void clickWidget(Widget widget)

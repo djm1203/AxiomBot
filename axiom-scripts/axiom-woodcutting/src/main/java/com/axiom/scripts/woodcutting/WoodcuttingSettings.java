@@ -11,22 +11,31 @@ public class WoodcuttingSettings extends ScriptSettings
     /** The tree type to chop. */
     public enum TreeType
     {
-        NORMAL("Tree",         1278),
-        OAK("Oak tree",        1751),
-        WILLOW("Willow tree",  5551),
-        MAPLE("Maple tree",    5765),
-        YEW("Yew tree",        38502),
-        MAGIC("Magic tree",    38504),
-        TEAK("Teak",           9036),
-        MAHOGANY("Mahogany",   9034);
+        // Multiple IDs cover all visual variants (e.g. Draynor willows span 5551-5553).
+        // Verify in-game with the RuneLite Object Markers plugin if a tree isn't found.
+        NORMAL  ("Tree",        new int[]{ 1276, 1278 }),
+        OAK     ("Oak tree",    new int[]{ 10820 }),
+        WILLOW  ("Willow tree", new int[]{ 10819, 10829, 10831, 10833 }),
+        MAPLE   ("Maple tree",  new int[]{ 10832, 10834 }),
+        YEW     ("Yew tree",    new int[]{ 10822, 10823 }),
+        MAGIC   ("Magic tree",  new int[]{ 10834 }),
+        TEAK    ("Teak",        new int[]{ 10041 }),
+        MAHOGANY("Mahogany",    new int[]{ 10047 });
 
         public final String objectName;
-        public final int    objectId;
+        public final int[]  objectIds;
 
-        TreeType(String objectName, int objectId)
+        TreeType(String objectName, int[] objectIds)
         {
             this.objectName = objectName;
-            this.objectId   = objectId;
+            this.objectIds  = objectIds;
+        }
+
+        /** Returns true if the given object ID matches this tree type. */
+        public boolean matches(int id)
+        {
+            for (int oid : objectIds) if (oid == id) return true;
+            return false;
         }
     }
 

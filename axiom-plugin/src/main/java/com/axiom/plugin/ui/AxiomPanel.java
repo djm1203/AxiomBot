@@ -3,6 +3,7 @@ package com.axiom.plugin.ui;
 import com.axiom.api.script.BotScript;
 import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
+import com.axiom.scripts.woodcutting.WoodcuttingScript;
 import com.axiom.plugin.ScriptLoader;
 import com.axiom.plugin.ScriptRunner;
 import com.axiom.plugin.ScriptState;
@@ -187,33 +188,32 @@ public class AxiomPanel extends PluginPanel
     // ── Config dialog ─────────────────────────────────────────────────────────
 
     /**
-     * If the script has a config dialog (detected via a createConfigDialog() method),
-     * opens it modally and returns the settings. Otherwise returns null.
+     * Opens the appropriate config dialog for the given script, if one exists.
      *
-     * Scripts declare a createConfigDialog(JComponent) method by convention;
-     * reflection is used here so BotScript (in axiom-api) stays Swing-free.
+     * Phase 1: explicit instanceof registry — scripts stay Swing-free because
+     * all dialog classes live here in axiom-plugin. When a new script is added,
+     * add a branch below.
+     *
+     * Phase 2: replace with a plugin-side registry populated at script-load time
+     * so the panel doesn't need recompiling for new scripts.
+     *
+     * Returns the populated ScriptSettings on Start, or null if the user
+     * cancelled or the script has no config dialog.
      */
     private ScriptSettings openConfigDialog(BotScript script)
     {
-        try
+        ScriptConfigDialog<?> dialog = null;
+
+        if (script instanceof WoodcuttingScript)
         {
-            java.lang.reflect.Method m = script.getClass()
-                .getMethod("createConfigDialog", javax.swing.JComponent.class);
-            ScriptConfigDialog<?> dialog = (ScriptConfigDialog<?>) m.invoke(script, this);
-            if (dialog.showDialog()) return dialog.getSettings();
-            return null; // user cancelled
+            dialog = new WoodcuttingConfigDialog(this);
         }
-        catch (NoSuchMethodException e)
-        {
-            // Script has no config dialog — start with null settings
-            return null;
-        }
-        catch (Exception e)
-        {
-            log.warn("AxiomPanel: could not open config dialog for {}: {}",
-                script.getName(), e.getMessage());
-            return null;
-        }
+        // Add more script types here as they are implemented:
+        // else if (script instanceof FiremakingScript) { dialog = new FiremakingConfigDialog(this); }
+
+        if (dialog == null) return null; // script has no config dialog
+
+        return dialog.showDialog() ? dialog.getSettings() : null;
     }
 
     // ── Status polling ────────────────────────────────────────────────────────

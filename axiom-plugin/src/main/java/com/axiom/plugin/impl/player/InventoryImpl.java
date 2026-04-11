@@ -105,11 +105,23 @@ public class InventoryImpl implements Inventory
     @Override
     public void drop(int slot)
     {
+        ItemContainer inv = getContainer();
+        if (inv == null) return;
+        Item[] items = inv.getItems();
+        if (slot < 0 || slot >= items.length) return;
+        Item item = items[slot];
+        if (item == null || item.getId() == -1) return;
+
+        int itemId = item.getId();
+        String itemName = "";
+        ItemComposition def = client.getItemDefinition(itemId);
+        if (def != null && def.getName() != null) itemName = def.getName();
+
         client.menuAction(
             slot, WidgetInfo.INVENTORY.getId(),
             MenuAction.CC_OP,
-            7, -1,
-            "Drop", ""
+            7, itemId,
+            "Drop", itemName
         );
     }
 

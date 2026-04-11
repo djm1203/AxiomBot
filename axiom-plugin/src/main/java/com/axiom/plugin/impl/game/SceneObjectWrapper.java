@@ -3,10 +3,13 @@ package com.axiom.plugin.impl.game;
 import com.axiom.api.game.SceneObject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.GameObject;
 import net.runelite.api.MenuAction;
 import net.runelite.api.NPC;
 import net.runelite.api.ObjectComposition;
+import net.runelite.api.Perspective;
 import net.runelite.api.TileObject;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 
 /**
@@ -44,7 +47,24 @@ public class SceneObjectWrapper implements SceneObject
         this.plane  = wp.getPlane();
 
         ObjectComposition def = client.getObjectDefinition(id);
+        // Follow the impostor chain — bank booths and other contextual objects store
+        // their real actions (e.g. "Bank") on the impostor, not the raw definition.
+        // getImpostor() can throw NPE internally (varbit lookup) for objects without
+        // varbit state, so guard with try-catch rather than just a null check.
+        if (def != null)
+        {
+            try
+            {
+                ObjectComposition impostor = def.getImpostor();
+                if (impostor != null) def = impostor;
+            }
+            catch (Exception ignored) { /* no impostor — use raw def */ }
+        }
         this.name    = (def != null && def.getName() != null) ? def.getName() : "";
+        // Preserve the original array including null slots — the slot index maps directly
+        // to GAME_OBJECT_FIRST/SECOND/THIRD_OPTION in menuAction. Filtering nulls would
+        // shift non-null entries and send the wrong MenuAction type.
+        // hasAction() and findActionIndex() perform null checks at use time.
         this.actions = (def != null && def.getActions() != null) ? def.getActions() : new String[0];
     }
 
@@ -80,7 +100,7 @@ public class SceneObjectWrapper implements SceneObject
     {
         for (String a : actions)
         {
-            if (action.equalsIgnoreCase(a)) return true;
+            if (a != null && action.equalsIgnoreCase(a)) return true;
         }
         return false;
     }
@@ -95,26 +115,73 @@ public class SceneObjectWrapper implements SceneObject
             return;
         }
 
+        log.info("interact: '{}' idx={} on {} (id={}) actions={}",
+            action, actionIdx, name, id, java.util.Arrays.toString(actions));
+
         if (npc != null)
         {
-            // NPC interaction
+            moveMouseTo(npc.getLocalLocation());
             client.menuAction(
                 0, 0,
                 npcMenuAction(actionIdx),
-                npc.getIndex(), -1,
+                npc.getIndex(), 0,
                 action, name
             );
         }
         else if (tileObject != null)
         {
-            // Game object / TileObject interaction
+            // Scene tile coordinates:
+            //   GameObject.getSceneMinLocation() returns net.runelite.api.Point (x=sceneX, y=sceneY)
+            //   for the southwest tile corner — correct for multi-tile objects.
+            //   Other TileObject types use LocalPoint.getSceneX/Y directly.
+            int sceneX, sceneY;
+            if (tileObject instanceof GameObject)
+            {
+                net.runelite.api.Point min = ((GameObject) tileObject).getSceneMinLocation();
+                sceneX = min.getX();
+                sceneY = min.getY();
+            }
+            else
+            {
+                LocalPoint lp = tileObject.getLocalLocation();
+                sceneX = lp.getSceneX();
+                sceneY = lp.getSceneY();
+            }
+
+            // Move mouse to the object's tile center before firing the action.
+            moveMouseTo(tileObject.getLocalLocation());
+
             client.menuAction(
-                tileObject.getLocalLocation().getSceneX(),
-                tileObject.getLocalLocation().getSceneY(),
+                sceneX, sceneY,
                 objectMenuAction(actionIdx),
-                tileObject.getId(), -1,
+                tileObject.getId(), 0,
                 action, name
             );
+        }
+    }
+
+    /**
+     * Moves the system mouse cursor to the canvas position of the given local point.
+     * RuneLite's OSRS client validates that the cursor is plausible near the target
+     * before processing a menuAction, so we position it on the object's tile first.
+     */
+    private void moveMouseTo(LocalPoint localPt)
+    {
+        try
+        {
+            net.runelite.api.Point pt = Perspective.localToCanvas(
+                client, localPt, client.getPlane());
+            if (pt == null) return;
+
+            java.awt.Canvas canvas = client.getCanvas();
+            if (canvas == null) return;
+
+            java.awt.Point origin = canvas.getLocationOnScreen();
+            new java.awt.Robot().mouseMove(origin.x + pt.getX(), origin.y + pt.getY());
+        }
+        catch (Exception e)
+        {
+            log.warn("SceneObjectWrapper: mouse move failed: {}", e.getMessage());
         }
     }
 
@@ -124,7 +191,7 @@ public class SceneObjectWrapper implements SceneObject
     {
         for (int i = 0; i < actions.length; i++)
         {
-            if (action.equalsIgnoreCase(actions[i])) return i;
+            if (actions[i] != null && action.equalsIgnoreCase(actions[i])) return i;
         }
         return -1;
     }

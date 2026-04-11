@@ -175,9 +175,9 @@ public class ScriptRunner
                 catch (Exception e)
                 {
                     consecutiveErrors++;
-                    log.error("Script error in {} ({}/{}): {}",
+                    log.error("Script error in {} ({}/{}): {} — {}",
                         activeScript.getName(), consecutiveErrors, MAX_CONSECUTIVE_ERRORS,
-                        e.getMessage(), e);
+                        e.getClass().getSimpleName(), e.getMessage(), e);
                     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS)
                     {
                         botLog.info("Script stopped after " + MAX_CONSECUTIVE_ERRORS + " consecutive errors");
@@ -202,6 +202,7 @@ public class ScriptRunner
         injectApis(script);
 
         botLog.setScriptName(script.getName());
+        botLog.setLoggerClass(script.getClass());
         botLog.info("Starting script: " + script.getName());
 
         script.onStart(settings);
@@ -221,6 +222,7 @@ public class ScriptRunner
             catch (Exception e) { log.error("Error during script stop: {}", e.getMessage(), e); }
         }
         botLog.setScriptName(null);
+        botLog.setLoggerClass(com.axiom.api.util.Log.class);
         logoutPaused = false;
         state        = ScriptState.STOPPED;
     }

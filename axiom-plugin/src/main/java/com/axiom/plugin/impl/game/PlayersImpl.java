@@ -30,8 +30,10 @@ public class PlayersImpl implements Players
     {
         Player p = client.getLocalPlayer();
         if (p == null) return false;
-        // idle pose anim ID 813 (varies with equipment; checking != idle is sufficient)
-        return p.getPoseAnimation() != 813 && p.getAnimation() == -1;
+        // Walking/running sets a non-idle pose animation while the active animation is -1.
+        // 813 is the bare-hands idle; 1426 covers the axe-in-hand idle variant.
+        int pose = p.getPoseAnimation();
+        return p.getAnimation() == -1 && pose != 813 && pose != 1426;
     }
 
     @Override

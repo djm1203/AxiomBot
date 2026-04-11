@@ -20,10 +20,25 @@ import org.slf4j.helpers.MessageFormatter;
  */
 public class Log
 {
-    private static final org.slf4j.Logger logger = LoggerFactory.getLogger("Axiom");
+    /**
+     * Instance logger — defaults to Log.class so messages always pass through
+     * RuneLite's logback config.  ScriptRunner calls setLoggerClass(script.getClass())
+     * before onStart() so output appears under the script's own class name.
+     */
+    private org.slf4j.Logger logger = LoggerFactory.getLogger(Log.class);
 
     /** Set by ScriptRunner when a new script starts. Cleared on stop. */
     @Setter private String scriptName = null;
+
+    /**
+     * Point this logger at the running script's class so log output appears as
+     * e.g. "com.axiom.scripts.woodcutting.WoodcuttingScript" in the terminal.
+     * Called by ScriptRunner.start() before onStart().
+     */
+    public void setLoggerClass(Class<?> clazz)
+    {
+        this.logger = LoggerFactory.getLogger(clazz);
+    }
 
     public void info(String message, Object... args)
     {
