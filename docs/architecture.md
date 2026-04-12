@@ -79,21 +79,33 @@ long-term architecture given the January 2026 client shutdown.
 
 ```
 axiom/                          ← parent POM
-├── axiom-api/                  ← shared contract layer
-├── axiom-plugin/               ← RuneLite plugin engine
-├── axiom-launcher/             ← standalone launcher app (Phase 3)
-└── axiom-scripts/
+├── axiom-api/                  ← shared contract layer (pure Java, no RuneLite)
+├── axiom-plugin/               ← RuneLite plugin + all implementations (fat JAR)
+├── axiom-launcher/             ← standalone launcher app (Phase 3 — not yet built)
+└── axiom-scripts/              ← parent POM for all scripts
     ├── axiom-woodcutting/
+    ├── axiom-fishing/
+    ├── axiom-firemaking/
+    ├── axiom-alchemy/
+    ├── axiom-herblore/
+    ├── axiom-fletching/
+    ├── axiom-crafting/
     ├── axiom-mining/
-    ├── axiom-agility/
-    └── ... (one module per script)
+    ├── axiom-smithing/
+    ├── axiom-combat/
+    ├── axiom-thieving/
+    └── axiom-agility/          ← DEFERRED (obstacle sequencing complexity)
 ```
 
 Dependency rules:
-- `axiom-api` has NO RuneLite dependency — it's pure Java
-- `axiom-plugin` depends on `axiom-api` + RuneLite as `provided`
-- Each script module depends on `axiom-api` only (NOT `axiom-plugin`)
-- `axiom-launcher` depends on nothing from the bot engine — it just spawns processes
+- `axiom-api` has NO RuneLite dependency — pure Java
+- `axiom-plugin` depends on `axiom-api` + RuneLite as `provided`; shades all script modules into one fat JAR
+- Each script module depends on `axiom-api` only (NOT `axiom-plugin` or RuneLite)
+- `axiom-launcher` depends on nothing from the bot engine — it spawns processes only
+
+**Current script loading model (Phase 1–2):** Script classes are shaded into the plugin JAR at build time. `ScriptLoader` discovers them via classpath scan for `@ScriptManifest`. No separate JAR deployment needed.
+
+**Future script loading model (Phase 4):** Script JARs downloaded separately to `~/.axiom/scripts/` and loaded at runtime via `URLClassLoader`. Adding a script = drop a JAR, no plugin recompile.
 
 ---
 
@@ -300,29 +312,25 @@ axiom proxies import --file proxies.csv
 ## Build Commands
 
 ```bash
-# Build everything
-mvn package -DskipTests
+# Build and deploy (one command)
+cd "C:/Users/dmart/Documents/Personal/scripts/bot_engine_osrs"
+mvn package -DskipTests -q && cp "axiom-plugin/target/axiom-plugin-1.0-SNAPSHOT.jar" "$USERPROFILE/.runelite/sideloaded-plugins/axiom-plugin-1.0-SNAPSHOT.jar"
 
-# Build release (obfuscated)
-mvn package -Prelease -DskipTests
-
-# Deploy plugin to RuneLite
-cp axiom-plugin/target/axiom-plugin-*.jar ~/.runelite/sideloaded-plugins/
-
-# Deploy a script JAR
-cp axiom-scripts/axiom-woodcutting/target/axiom-woodcutting-*.jar ~/.axiom/scripts/
-
-# Launch RuneLite in dev mode
-java -ea -jar <runelite-shaded.jar> --developer-mode
+# Launch RuneLite in dev mode (local source build required)
+java -ea -jar "C:\Users\dmart\Documents\Personal\Github\runelite\runelite-client\build\libs\client-1.12.24-SNAPSHOT-shaded.jar" --developer-mode
 ```
 
 ---
 
-## Deployment flow
+## Deployment flow (current)
 
 ```
 mvn package
-    → axiom-plugin.jar      → ~/.runelite/sideloaded-plugins/
-    → axiom-woodcutting.jar → ~/.axiom/scripts/
-    → (future) axiom-launcher.jar → installed as standalone app
+    → axiom-plugin-1.0-SNAPSHOT.jar (fat JAR, includes all scripts)
+        → $USERPROFILE/.runelite/sideloaded-plugins/axiom-plugin-1.0-SNAPSHOT.jar
+
+(Phase 4 future)
+    → axiom-plugin.jar  → ~/.runelite/sideloaded-plugins/
+    → axiom-*.jar       → ~/.axiom/scripts/   (loaded via URLClassLoader at runtime)
+    → axiom-launcher.jar → installed as standalone app
 ```
