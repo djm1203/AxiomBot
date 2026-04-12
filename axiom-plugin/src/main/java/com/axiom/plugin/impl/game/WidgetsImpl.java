@@ -1,6 +1,8 @@
 package com.axiom.plugin.impl.game;
 
 import com.axiom.api.game.Widgets;
+import com.axiom.api.util.Antiban;
+import com.axiom.plugin.util.RobotClick;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.MenuAction;
@@ -32,10 +34,15 @@ public class WidgetsImpl implements Widgets
     // Level-up dialog close
     private static final int CHILD_LEVEL_UP_CONTINUE = 4;
 
-    private final Client client;
+    private final Client  client;
+    private final Antiban antiban;
 
     @Inject
-    public WidgetsImpl(Client client) { this.client = client; }
+    public WidgetsImpl(Client client, Antiban antiban)
+    {
+        this.client  = client;
+        this.antiban = antiban;
+    }
 
     @Override
     public boolean isMakeDialogOpen()
@@ -53,7 +60,7 @@ public class WidgetsImpl implements Widgets
             log.warn("WidgetsImpl: make-all button not found");
             return;
         }
-        clickWidget(btn);
+        RobotClick.click(btn, client, antiban);
     }
 
     @Override
@@ -93,7 +100,7 @@ public class WidgetsImpl implements Widgets
             {
                 if (child != null && text.equalsIgnoreCase(child.getText()))
                 {
-                    clickWidget(child);
+                    RobotClick.click(child, client, antiban);
                     return;
                 }
             }
@@ -114,19 +121,27 @@ public class WidgetsImpl implements Widgets
         Widget btn = client.getWidget(GROUP_LEVEL_UP, CHILD_LEVEL_UP_CONTINUE);
         if (btn != null && !btn.isHidden())
         {
-            clickWidget(btn);
+            RobotClick.click(btn, client, antiban);
         }
     }
 
-    // ── Internal ─────────────────────────────────────────────────────────────
-
-    private void clickWidget(Widget widget)
+    @Override
+    public boolean isWidgetVisible(int groupId, int childId)
     {
-        client.menuAction(
-            1, widget.getId(),
-            MenuAction.CC_OP,
-            1, -1,
-            "", ""
-        );
+        Widget w = client.getWidget(groupId, childId);
+        return w != null && !w.isHidden();
     }
+
+    @Override
+    public void clickWidget(int groupId, int childId)
+    {
+        Widget w = client.getWidget(groupId, childId);
+        if (w == null || w.isHidden())
+        {
+            log.warn("WidgetsImpl.clickWidget: widget ({},{}) null or hidden", groupId, childId);
+            return;
+        }
+        RobotClick.click(w, client, antiban);
+    }
+
 }

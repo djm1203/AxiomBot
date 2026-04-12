@@ -276,6 +276,28 @@ public class Antiban
         return path;
     }
 
+    /**
+     * Moves the system cursor from (fromX, fromY) to (toX, toY) along a
+     * quadratic Bezier curve, with a small random jitter applied to the target.
+     * Replaces a direct robot.mouseMove() call in RobotClick so all widget
+     * interactions travel a natural-looking path.
+     *
+     * @param fromX  current cursor X in screen coordinates
+     * @param fromY  current cursor Y in screen coordinates
+     * @param toX    target X in screen coordinates (before jitter)
+     * @param toY    target Y in screen coordinates (before jitter)
+     */
+    public void moveMouse(int fromX, int fromY, int toX, int toY)
+    {
+        if (robot == null) return;
+        Point jittered = mouseJitter(new Point(toX, toY));
+        Point[] path   = mousePath(new Point(fromX, fromY), jittered, 12);
+        for (Point p : path)
+        {
+            robot.mouseMove(p.x, p.y);
+        }
+    }
+
     // ── Idle action triggers ──────────────────────────────────────────────────
 
     /**

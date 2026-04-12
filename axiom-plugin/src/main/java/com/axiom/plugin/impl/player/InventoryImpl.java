@@ -1,6 +1,7 @@
 package com.axiom.plugin.impl.player;
 
 import com.axiom.api.player.Inventory;
+import com.axiom.api.util.Antiban;
 import com.axiom.plugin.util.RobotClick;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -22,10 +23,15 @@ public class InventoryImpl implements Inventory
 {
     private static final int INVENTORY_SIZE = 28;
 
-    private final Client client;
+    private final Client  client;
+    private final Antiban antiban;
 
     @Inject
-    public InventoryImpl(Client client) { this.client = client; }
+    public InventoryImpl(Client client, Antiban antiban)
+    {
+        this.client  = client;
+        this.antiban = antiban;
+    }
 
     @Override
     public boolean contains(int itemId)
@@ -219,22 +225,29 @@ public class InventoryImpl implements Inventory
         Widget slotWidget = getInventorySlotWidget(slot);
         if (slotWidget == null) return;
         log.info("[INVENTORY] selectItem: slot={} itemId={}", slot, itemId);
-        RobotClick.click(slotWidget, client);
+        RobotClick.click(slotWidget, client, antiban);
     }
 
     @Override
     public void useSelectedItemOn(int targetItemId)
     {
-        int targetSlot = getSlot(targetItemId);
-        if (targetSlot == -1)
+        // Delegates to clickItem — same Robot click, different semantic context.
+        clickItem(targetItemId);
+    }
+
+    @Override
+    public void clickItem(int itemId)
+    {
+        int slot = getSlot(itemId);
+        if (slot == -1)
         {
-            log.warn("[INVENTORY] useSelectedItemOn: item {} not in inventory", targetItemId);
+            log.warn("[INVENTORY] clickItem: item {} not in inventory", itemId);
             return;
         }
-        Widget slotWidget = getInventorySlotWidget(targetSlot);
+        Widget slotWidget = getInventorySlotWidget(slot);
         if (slotWidget == null) return;
-        log.info("[INVENTORY] useSelectedItemOn: slot={} itemId={}", targetSlot, targetItemId);
-        RobotClick.click(slotWidget, client);
+        log.info("[INVENTORY] clickItem: slot={} itemId={}", slot, itemId);
+        RobotClick.click(slotWidget, client, antiban);
     }
 
     /**

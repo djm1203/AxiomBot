@@ -98,4 +98,11 @@ public class PlayersImpl implements Players
     {
         return getWorldX() == worldX && getWorldY() == worldY;
     }
+
+    @Override
+    public int getAnimation()
+    {
+        Player p = client.getLocalPlayer();
+        return p != null ? p.getAnimation() : -1;
+    }
 }

@@ -78,4 +78,11 @@ public interface Inventory
      * {@link #selectItem(int)}.
      */
     void useSelectedItemOn(int targetItemId);
+
+    /**
+     * Robot-clicks the inventory slot containing the item with the given ID.
+     * General-purpose click for spell-on-item (Alchemy), use-item, and similar
+     * interactions. No-op if the item is not in inventory.
+     */
+    void clickItem(int itemId);
 }

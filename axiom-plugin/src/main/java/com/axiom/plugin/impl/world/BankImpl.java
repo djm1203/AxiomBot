@@ -1,6 +1,7 @@
 package com.axiom.plugin.impl.world;
 
 import com.axiom.api.game.SceneObject;
+import com.axiom.api.util.Antiban;
 import com.axiom.api.world.Bank;
 import com.axiom.plugin.impl.game.GameObjectsImpl;
 import com.axiom.plugin.impl.game.NpcsImpl;
@@ -22,16 +23,18 @@ public class BankImpl implements Bank
     private static final int CLOSE_CHILD_ID = 2;
     private static final int ITEMS_CHILD_ID = 13;
 
-    private final Client         client;
+    private final Client          client;
     private final GameObjectsImpl gameObjects;
     private final NpcsImpl        npcs;
+    private final Antiban         antiban;
 
     @Inject
-    public BankImpl(Client client, GameObjectsImpl gameObjects, NpcsImpl npcs)
+    public BankImpl(Client client, GameObjectsImpl gameObjects, NpcsImpl npcs, Antiban antiban)
     {
         this.client      = client;
         this.gameObjects = gameObjects;
         this.npcs        = npcs;
+        this.antiban     = antiban;
     }
 
     @Override
@@ -90,7 +93,7 @@ public class BankImpl implements Bank
             return;
         }
         log.info("[BANKING] clicking deposit inventory button (bounds={})", depositBtn.getBounds());
-        RobotClick.click(depositBtn, client);
+        RobotClick.click(depositBtn, client, antiban);
     }
 
     @Override
@@ -199,7 +202,7 @@ public class BankImpl implements Bank
     public void close()
     {
         Widget closeBtn = client.getWidget(BANK_GROUP_ID, CLOSE_CHILD_ID);
-        if (closeBtn != null && !closeBtn.isHidden()) RobotClick.click(closeBtn, client);
+        if (closeBtn != null && !closeBtn.isHidden()) RobotClick.click(closeBtn, client, antiban);
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────

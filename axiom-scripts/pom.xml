@@ -19,6 +19,8 @@
         <module>axiom-woodcutting</module>
         <module>axiom-fishing</module>
         <module>axiom-firemaking</module>
+        <module>axiom-alchemy</module>
+        <module>axiom-herblore</module>
     </modules>
 
     <!--

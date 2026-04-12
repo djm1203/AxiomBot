@@ -55,4 +55,20 @@ public interface Widgets
 
     /** Dismisses the level-up dialog if it is open. */
     void dismissLevelUpDialog();
+
+    /**
+     * Returns true if the widget at (groupId, childId) exists and is not hidden.
+     * Use this to check whether a spellbook spell or other UI component is visible
+     * before attempting to click it.
+     */
+    boolean isWidgetVisible(int groupId, int childId);
+
+    /**
+     * Robot-clicks the widget at (groupId, childId).
+     * No-op if the widget is null or hidden.
+     *
+     * Used for spellbook clicks and other UI interactions where menuAction
+     * CC_OP is silently ignored in this RuneLite build.
+     */
+    void clickWidget(int groupId, int childId);
 }

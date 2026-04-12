@@ -35,4 +35,10 @@ public interface Players
 
     /** Returns true if the local player is at the given world coordinates. */
     boolean isAt(int worldX, int worldY);
+
+    /**
+     * Returns the current animation ID of the local player, or -1 if idle.
+     * Use this for precise animation detection (e.g. alchemy = 712, chop = 879).
+     */
+    int getAnimation();
 }

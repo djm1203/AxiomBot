@@ -1,10 +1,12 @@
 package com.axiom.plugin.util;
 
+import com.axiom.api.util.Antiban;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.widgets.Widget;
 
 import java.awt.Canvas;
+import java.awt.MouseInfo;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Robot;
@@ -17,7 +19,8 @@ import java.awt.event.InputEvent;
  * (inventory slots, bank deposit buttons) in this RuneLite build. A real
  * java.awt.Robot mouse event bypasses that and reaches the game directly.
  *
- * Used by BankImpl (deposit/close buttons) and InventoryImpl (item-on-item).
+ * Uses Antiban.moveMouse() to travel a Bezier curve path to the target
+ * instead of teleporting directly — every click looks natural.
  */
 @Slf4j
 public final class RobotClick
@@ -25,13 +28,14 @@ public final class RobotClick
     private RobotClick() {}
 
     /**
-     * Moves the system mouse cursor to the center of the widget's canvas bounds
-     * and fires a left-click.
+     * Moves the cursor along a Bezier curve to the center of the widget's
+     * canvas bounds (with jitter), then fires a left-click.
      *
      * @param widget  the target widget (must have non-null bounds)
      * @param client  RuneLite client (used to resolve canvas screen position)
+     * @param antiban antiban instance (drives the Bezier path)
      */
-    public static void click(Widget widget, Client client)
+    public static void click(Widget widget, Client client, Antiban antiban)
     {
         try
         {
@@ -39,15 +43,18 @@ public final class RobotClick
             Canvas    canvas = client.getCanvas();
             if (canvas == null) { log.warn("RobotClick: canvas null"); return; }
 
-            Point origin = canvas.getLocationOnScreen();
-            int x = origin.x + bounds.x + bounds.width  / 2;
-            int y = origin.y + bounds.y + bounds.height / 2;
+            Point origin  = canvas.getLocationOnScreen();
+            int   targetX = origin.x + bounds.x + bounds.width  / 2;
+            int   targetY = origin.y + bounds.y + bounds.height / 2;
+
+            // Bezier path from current cursor position to target (with jitter)
+            Point current = MouseInfo.getPointerInfo().getLocation();
+            antiban.moveMouse(current.x, current.y, targetX, targetY);
 
             Robot robot = new Robot();
-            robot.mouseMove(x, y);
             robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);
             robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
-            log.info("RobotClick: clicked ({}, {})", x, y);
+            log.info("RobotClick: clicked ({}, {})", targetX, targetY);
         }
         catch (Exception e)
         {
