@@ -23,6 +23,7 @@
         <module>axiom-herblore</module>
         <module>axiom-fletching</module>
         <module>axiom-crafting</module>
+        <module>axiom-mining</module>
     </modules>
 
     <!--

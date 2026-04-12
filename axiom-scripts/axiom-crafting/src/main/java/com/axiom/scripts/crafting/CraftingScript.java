@@ -264,11 +264,18 @@ public class CraftingScript extends BotScript
                 return;
             }
 
-            log.info("[BANKING] Opening bank (attempt {}/{})",
-                bankOpenAttempts + 1, MAX_BANK_OPEN_ATTEMPTS);
-            bank.openNearest();
-            bankOpenAttempts++;
-            setTickDelay(3);
+            if (bank.openNearest())
+            {
+                log.info("[BANKING] Clicked bank (attempt {}/{})",
+                    bankOpenAttempts + 1, MAX_BANK_OPEN_ATTEMPTS);
+                bankOpenAttempts++;
+                setTickDelay(3);
+            }
+            else
+            {
+                log.debug("[BANKING] Walking to bank...");
+                setTickDelay(2);
+            }
             return;
         }
 

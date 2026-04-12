@@ -13,10 +13,26 @@ public interface Bank
     boolean isNearBank();
 
     /**
-     * Opens the nearest bank booth, chest, or counter.
-     * Does nothing if already open. May need to walk closer first.
+     * Walks toward and opens the nearest bank booth, chest, or counter.
+     *
+     * <p>While the player is more than 3 tiles away or still moving, the implementation
+     * fires at most one path-click every 6 seconds (to avoid spam-cancelling the walk)
+     * and returns {@code false}.  Once the player is within 3 tiles and stationary
+     * the implementation fires the "Bank" interact and returns {@code true}.
+     *
+     * <p>Scripts should only count {@code bankOpenAttempts} when this returns {@code true}:
+     * <pre>
+     *   if (bank.openNearest()) {
+     *       bankOpenAttempts++;
+     *       setTickDelay(3);
+     *   } else {
+     *       setTickDelay(2);   // still walking — try again next tick
+     *   }
+     * </pre>
+     *
+     * @return true if a close-range "Bank" click was sent, false if still en route
      */
-    void openNearest();
+    boolean openNearest();
 
     /** Deposits all items currently in the inventory. */
     void depositAll();

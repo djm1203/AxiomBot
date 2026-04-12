@@ -120,7 +120,9 @@ public class SceneObjectWrapper implements SceneObject
 
         if (npc != null)
         {
-            moveMouseTo(npc.getLocalLocation());
+            // Bail out if the NPC is off-screen — the server rejects clicks whose
+            // mouse position doesn't correspond to a valid canvas coordinate.
+            if (!moveMouseTo(npc.getLocalLocation())) return;
             client.menuAction(
                 0, 0,
                 npcMenuAction(actionIdx),
@@ -149,7 +151,8 @@ public class SceneObjectWrapper implements SceneObject
             }
 
             // Move mouse to the object's tile center before firing the action.
-            moveMouseTo(tileObject.getLocalLocation());
+            // Bail out if the object is outside the visible viewport.
+            if (!moveMouseTo(tileObject.getLocalLocation())) return;
 
             client.menuAction(
                 sceneX, sceneY,
@@ -164,24 +167,46 @@ public class SceneObjectWrapper implements SceneObject
      * Moves the system mouse cursor to the canvas position of the given local point.
      * RuneLite's OSRS client validates that the cursor is plausible near the target
      * before processing a menuAction, so we position it on the object's tile first.
+     *
+     * @return true if the cursor was moved successfully; false if the point is null,
+     *         off-screen, or an error occurred — callers must not fire menuAction when false.
      */
-    private void moveMouseTo(LocalPoint localPt)
+    private boolean moveMouseTo(LocalPoint localPt)
     {
         try
         {
             net.runelite.api.Point pt = Perspective.localToCanvas(
                 client, localPt, client.getPlane());
-            if (pt == null) return;
+            if (pt == null)
+            {
+                log.warn("interact: canvas position is null for {} (id={}) — skipping click",
+                    name, id);
+                return false;
+            }
 
             java.awt.Canvas canvas = client.getCanvas();
-            if (canvas == null) return;
+            if (canvas == null) return false;
+
+            // Reject positions outside the visible game viewport.  When an object is
+            // off-screen Perspective.localToCanvas() can return coordinates outside
+            // [0, width) x [0, height), causing the Robot to click somewhere on the
+            // desktop rather than inside the game window.
+            if (pt.getX() < 0 || pt.getY() < 0 ||
+                pt.getX() >= canvas.getWidth() || pt.getY() >= canvas.getHeight())
+            {
+                log.warn("interact: canvas position ({},{}) is off-screen for {} (id={}) — skipping click",
+                    pt.getX(), pt.getY(), name, id);
+                return false;
+            }
 
             java.awt.Point origin = canvas.getLocationOnScreen();
             new java.awt.Robot().mouseMove(origin.x + pt.getX(), origin.y + pt.getY());
+            return true;
         }
         catch (Exception e)
         {
             log.warn("SceneObjectWrapper: mouse move failed: {}", e.getMessage());
+            return false;
         }
     }
 

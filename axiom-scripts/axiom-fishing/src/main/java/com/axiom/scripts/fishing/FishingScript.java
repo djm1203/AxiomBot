@@ -5,6 +5,7 @@ import com.axiom.api.game.Players;
 import com.axiom.api.game.SceneObject;
 import com.axiom.api.player.Inventory;
 import com.axiom.api.script.BotScript;
+import com.axiom.api.world.Movement;
 import com.axiom.api.script.ScriptCategory;
 import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
@@ -42,11 +43,16 @@ public class FishingScript extends BotScript
     private Players   players;
     private Inventory inventory;
     private Bank      bank;
+    private Movement  movement;
     private Antiban   antiban;
     private Log       log;
 
     // ── Settings ──────────────────────────────────────────────────────────────
     private FishingSettings settings;
+
+    // ── Start location — recorded on first game tick, used to walk back after banking ──
+    private boolean startTileRecorded = false;
+    private int     startX, startY;
 
     // ── State machine ─────────────────────────────────────────────────────────
     private enum State { FIND_SPOT, FISHING, FULL, DROPPING, BANKING }
@@ -100,6 +106,8 @@ public class FishingScript extends BotScript
         antiban.setBreakDurationMinutes(settings.breakDurationMinutes);
         antiban.reset();
 
+        startTileRecorded = false;
+
         log.info("Fishing started: spot={} action={} powerFish={}",
             settings.spotType.name(), settings.bankAction.name(), settings.powerFish);
 
@@ -109,6 +117,16 @@ public class FishingScript extends BotScript
     @Override
     public void onLoop()
     {
+        // Record start tile on the first game tick — onStart() runs on the Swing EDT
+        // so RuneLite API calls there will crash with AssertionError.
+        if (!startTileRecorded)
+        {
+            startX = players.getWorldX();
+            startY = players.getWorldY();
+            startTileRecorded = true;
+            log.info("[INIT] Start tile recorded: ({},{})", startX, startY);
+        }
+
         switch (state)
         {
             case FIND_SPOT: handleFindSpot(); break;
@@ -254,14 +272,18 @@ public class FishingScript extends BotScript
                 return;
             }
 
-            // Walk toward and open the bank. If the booth is in the scene (within ~50 tiles)
-            // the game will path-find automatically. We re-click every 3 ticks rather than
-            // spamming, giving the client time to start moving.
-            log.info("[BANKING] Opening bank (attempt {}/{})",
-                bankOpenAttempts + 1, MAX_BANK_OPEN_ATTEMPTS);
-            bank.openNearest();
-            bankOpenAttempts++;
-            setTickDelay(3);
+            if (bank.openNearest())
+            {
+                log.info("[BANKING] Clicked bank (attempt {}/{})",
+                    bankOpenAttempts + 1, MAX_BANK_OPEN_ATTEMPTS);
+                bankOpenAttempts++;
+                setTickDelay(3);
+            }
+            else
+            {
+                log.debug("[BANKING] Walking to bank...");
+                setTickDelay(2);
+            }
             return;
         }
 
@@ -288,7 +310,19 @@ public class FishingScript extends BotScript
         log.info("[BANKING] Deposit complete — closing bank");
         bank.close();
         bankJustOpened = false;
-        setTickDelay(2);
+
+        int distToStart = players.distanceTo(startX, startY);
+        if (distToStart > 10)
+        {
+            log.info("[BANKING] Walking back to fishing area ({},{}) — distance={}",
+                startX, startY, distToStart);
+            movement.walkTo(startX, startY);
+            setTickDelay(5);
+        }
+        else
+        {
+            setTickDelay(2);
+        }
         state = State.FIND_SPOT;
     }
 }
