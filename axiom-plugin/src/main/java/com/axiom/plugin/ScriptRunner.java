@@ -205,6 +205,7 @@ public class ScriptRunner
         botLog.setLoggerClass(script.getClass());
         botLog.info("Starting script: " + script.getName());
 
+        camera.setupForScripting();
         script.onStart(settings);
         antiban.reset();
         consecutiveErrors = 0;

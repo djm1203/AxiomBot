@@ -17,4 +17,11 @@ public interface Camera
 
     /** Returns the current camera pitch (0–2047). */
     int getPitch();
+
+    /**
+     * Sets up the camera for scripting: zooms to maximum zoom-out and pitches to
+     * top-down. Runs asynchronously — returns immediately; camera moves over ~2 s.
+     * Call once from ScriptRunner.start() before onStart().
+     */
+    void setupForScripting();
 }

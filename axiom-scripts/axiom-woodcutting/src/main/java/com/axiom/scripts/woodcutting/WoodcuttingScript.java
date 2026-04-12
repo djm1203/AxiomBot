@@ -102,7 +102,6 @@ public class WoodcuttingScript extends BotScript
     @Override
     public void onLoop()
     {
-        log.debug("onLoop state={}", state);
         switch (state)
         {
             case FIND_TREE: findTree();   break;

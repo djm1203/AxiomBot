@@ -36,6 +36,53 @@ public class CameraImpl implements Camera
         }
     }
 
+    /**
+     * Zooms to maximum zoom-out and pitches the camera to top-down.
+     * Runs on a daemon thread — never blocks the EDT or game thread.
+     *
+     * Zoom: scrolls the mouse wheel down 25 times over the canvas centre.
+     *   Positive mouseWheel() = scroll down = zoom out in OSRS.
+     * Pitch: holds the UP arrow for 2 s (enough to reach max overhead from any angle).
+     */
+    @Override
+    public void setupForScripting()
+    {
+        new Thread(() ->
+        {
+            try
+            {
+                java.awt.Canvas canvas = client.getCanvas();
+                if (canvas == null) { log.warn("setupForScripting: canvas null"); return; }
+
+                java.awt.Point origin  = canvas.getLocationOnScreen();
+                int cx = origin.x + canvas.getWidth()  / 2;
+                int cy = origin.y + canvas.getHeight() / 2;
+
+                java.awt.Robot r = new java.awt.Robot();
+                r.setAutoDelay(0);
+
+                // Zoom out to maximum
+                r.mouseMove(cx, cy);
+                for (int i = 0; i < 25; i++)
+                {
+                    r.mouseWheel(3);   // positive = scroll down = zoom out
+                    r.delay(30);
+                }
+
+                // Pitch to top-down: hold UP arrow ~2 s
+                r.keyPress(java.awt.event.KeyEvent.VK_UP);
+                r.delay(2000);
+                r.keyRelease(java.awt.event.KeyEvent.VK_UP);
+
+                log.info("setupForScripting: zoom out + top-down pitch done");
+            }
+            catch (Exception e)
+            {
+                log.warn("setupForScripting failed: {}", e.getMessage());
+            }
+        }, "axiom-cam-setup").start();
+    }
+
     @Override
     public void rotateTo(int worldX, int worldY)
     {
