@@ -4,6 +4,7 @@ import com.axiom.api.game.SceneObject;
 import com.axiom.api.world.Bank;
 import com.axiom.plugin.impl.game.GameObjectsImpl;
 import com.axiom.plugin.impl.game.NpcsImpl;
+import com.axiom.plugin.util.RobotClick;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.MenuAction;
@@ -89,7 +90,7 @@ public class BankImpl implements Bank
             return;
         }
         log.info("[BANKING] clicking deposit inventory button (bounds={})", depositBtn.getBounds());
-        robotClickWidget(depositBtn);
+        RobotClick.click(depositBtn, client);
     }
 
     @Override
@@ -198,7 +199,7 @@ public class BankImpl implements Bank
     public void close()
     {
         Widget closeBtn = client.getWidget(BANK_GROUP_ID, CLOSE_CHILD_ID);
-        if (closeBtn != null && !closeBtn.isHidden()) robotClickWidget(closeBtn);
+        if (closeBtn != null && !closeBtn.isHidden()) RobotClick.click(closeBtn, client);
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────
@@ -207,36 +208,6 @@ public class BankImpl implements Bank
     {
         // hasAction() uses the impostor-corrected actions cached in SceneObjectWrapper
         return gameObjects.nearest(o -> o.hasAction("Bank"));
-    }
-
-    /**
-     * Moves the system mouse cursor to the center of the widget's canvas bounds
-     * and fires a left-click. Mirrors the approach used in SceneObjectWrapper for
-     * game objects — menuAction CC_OP does not work reliably for widget buttons
-     * in this RuneLite build, so a real mouse event is required.
-     */
-    private void robotClickWidget(Widget widget)
-    {
-        try
-        {
-            java.awt.Rectangle bounds = widget.getBounds();
-            java.awt.Canvas canvas = client.getCanvas();
-            if (canvas == null) { log.warn("robotClickWidget: canvas is null"); return; }
-
-            java.awt.Point origin = canvas.getLocationOnScreen();
-            int x = origin.x + bounds.x + bounds.width  / 2;
-            int y = origin.y + bounds.y + bounds.height / 2;
-
-            java.awt.Robot robot = new java.awt.Robot();
-            robot.mouseMove(x, y);
-            robot.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK);
-            robot.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK);
-            log.info("robotClickWidget: clicked ({}, {})", x, y);
-        }
-        catch (Exception e)
-        {
-            log.warn("robotClickWidget failed: {}", e.getMessage());
-        }
     }
 
     private static boolean isProtected(int itemId, int[] protectedIds)

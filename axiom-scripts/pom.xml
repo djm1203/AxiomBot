@@ -18,6 +18,7 @@
     <modules>
         <module>axiom-woodcutting</module>
         <module>axiom-fishing</module>
+        <module>axiom-firemaking</module>
     </modules>
 
     <!--

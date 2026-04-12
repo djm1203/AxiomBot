@@ -8,6 +8,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.awt.AWTException;
 import java.awt.Robot;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 
 @Slf4j
@@ -61,8 +62,19 @@ public class CameraImpl implements Camera
                 java.awt.Robot r = new java.awt.Robot();
                 r.setAutoDelay(0);
 
-                // Zoom out to maximum
+                // Request focus — Robot sends input to the focused window.
+                // Without this, zoom/key presses go to whatever window was last active.
+                canvas.requestFocusInWindow();
+                r.delay(100);
+
+                // Left-click canvas center to ensure the game has mouse focus
+                // (requestFocusInWindow alone isn't always enough for mouse wheel events).
                 r.mouseMove(cx, cy);
+                r.mousePress(InputEvent.BUTTON1_DOWN_MASK);
+                r.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
+                r.delay(100);
+
+                // Zoom out to maximum
                 for (int i = 0; i < 25; i++)
                 {
                     r.mouseWheel(3);   // positive = scroll down = zoom out
@@ -70,9 +82,9 @@ public class CameraImpl implements Camera
                 }
 
                 // Pitch to top-down: hold UP arrow ~2 s
-                r.keyPress(java.awt.event.KeyEvent.VK_UP);
+                r.keyPress(KeyEvent.VK_UP);
                 r.delay(2000);
-                r.keyRelease(java.awt.event.KeyEvent.VK_UP);
+                r.keyRelease(KeyEvent.VK_UP);
 
                 log.info("setupForScripting: zoom out + top-down pitch done");
             }

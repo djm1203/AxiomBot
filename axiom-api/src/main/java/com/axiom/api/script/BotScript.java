@@ -24,7 +24,8 @@ public abstract class BotScript
      * ticks, decrementing each time. Scripts call setTickDelay() to insert a
      * human-like pause between actions without sleeping the client thread.
      */
-    private int tickDelay = 0;
+    private int     tickDelay    = 0;
+    private boolean stopRequested = false;
 
     /** Returns true if this script is currently in a tick-delay pause. */
     public final boolean hasTickDelay()
@@ -46,6 +47,22 @@ public abstract class BotScript
     protected final void setTickDelay(int ticks)
     {
         tickDelay = Math.max(0, ticks);
+    }
+
+    /**
+     * Signals the framework to stop this script after the current onLoop() returns.
+     * ScriptRunner checks isStopRequested() immediately after onLoop() completes.
+     * Use this when the script has naturally finished (e.g. no more logs to burn).
+     */
+    protected final void stop()
+    {
+        stopRequested = true;
+    }
+
+    /** Called by ScriptRunner to check whether the script requested a self-stop. */
+    public final boolean isStopRequested()
+    {
+        return stopRequested;
     }
 
     // ── Contract every script must implement ─────────────────────────────────

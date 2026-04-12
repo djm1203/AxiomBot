@@ -1,6 +1,7 @@
 package com.axiom.plugin.impl.player;
 
 import com.axiom.api.player.Inventory;
+import com.axiom.plugin.util.RobotClick;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.InventoryID;
@@ -8,6 +9,7 @@ import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.MenuAction;
+import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 
 import javax.inject.Inject;
@@ -28,7 +30,8 @@ public class InventoryImpl implements Inventory
     @Override
     public boolean contains(int itemId)
     {
-        return count(itemId) > 0;
+        // Bypass count() — checking slot presence never depends on quantity.
+        return getSlot(itemId) != -1;
     }
 
     @Override
@@ -42,10 +45,19 @@ public class InventoryImpl implements Inventory
     {
         ItemContainer inv = getContainer();
         if (inv == null) return 0;
-        return Arrays.stream(inv.getItems())
-            .filter(item -> item != null && item.getId() == itemId)
-            .mapToInt(Item::getQuantity)
-            .sum();
+        Item[] items = inv.getItems();
+        if (items == null) return 0;
+        int total = 0;
+        for (Item item : items)
+        {
+            if (item == null || item.getId() == -1) continue;
+            if (item.getId() == itemId)
+            {
+                // Use quantity for stackable items; treat 0-quantity as 1 (item is present).
+                total += item.getQuantity() > 0 ? item.getQuantity() : 1;
+            }
+        }
+        return total;
     }
 
     @Override
@@ -158,14 +170,99 @@ public class InventoryImpl implements Inventory
     @Override
     public void useItemOn(int slot, int targetSlot)
     {
-        // Tick 1: select the item
-        client.menuAction(
-            slot, WidgetInfo.INVENTORY.getId(),
-            MenuAction.ITEM_USE,
-            0, -1,
-            "Use", ""
-        );
-        // Tick 2 must be handled by the caller via useSelectedItemOn()
+        ItemContainer inv = getContainer();
+        if (inv == null) return;
+        Item[] items = inv.getItems();
+        if (slot < 0 || slot >= items.length || items[slot] == null || items[slot].getId() == -1) return;
+        if (targetSlot < 0 || targetSlot >= items.length || items[targetSlot] == null || items[targetSlot].getId() == -1) return;
+
+        int sourceId = items[slot].getId();
+        int targetId = items[targetSlot].getId();
+        int containerId = WidgetInfo.INVENTORY.getId();
+
+        // Step 1: select the source item for use (CC_OP op=2 = "Use")
+        client.menuAction(slot, containerId, MenuAction.CC_OP, 2, sourceId, "Use", getItemName(sourceId));
+
+        // Step 2: use on target (same call — both fire in the same tick)
+        // If the game requires two separate ticks, split into a SELECT state + this state.
+        client.menuAction(targetSlot, containerId, MenuAction.WIDGET_TARGET_ON_WIDGET, 0,
+            targetId, getItemName(targetId), "");
+    }
+
+    @Override
+    public void useItemOnById(int sourceItemId, int targetItemId)
+    {
+        int sourceSlot = getSlot(sourceItemId);
+        int targetSlot = getSlot(targetItemId);
+        if (sourceSlot == -1)
+        {
+            log.warn("[INVENTORY] useItemOnById: item {} not in inventory", sourceItemId);
+            return;
+        }
+        if (targetSlot == -1)
+        {
+            log.warn("[INVENTORY] useItemOnById: item {} not in inventory", targetItemId);
+            return;
+        }
+        useItemOn(sourceSlot, targetSlot);
+    }
+
+    @Override
+    public void selectItem(int itemId)
+    {
+        int slot = getSlot(itemId);
+        if (slot == -1)
+        {
+            log.warn("[INVENTORY] selectItem: item {} not in inventory", itemId);
+            return;
+        }
+        Widget slotWidget = getInventorySlotWidget(slot);
+        if (slotWidget == null) return;
+        log.info("[INVENTORY] selectItem: slot={} itemId={}", slot, itemId);
+        RobotClick.click(slotWidget, client);
+    }
+
+    @Override
+    public void useSelectedItemOn(int targetItemId)
+    {
+        int targetSlot = getSlot(targetItemId);
+        if (targetSlot == -1)
+        {
+            log.warn("[INVENTORY] useSelectedItemOn: item {} not in inventory", targetItemId);
+            return;
+        }
+        Widget slotWidget = getInventorySlotWidget(targetSlot);
+        if (slotWidget == null) return;
+        log.info("[INVENTORY] useSelectedItemOn: slot={} itemId={}", targetSlot, targetItemId);
+        RobotClick.click(slotWidget, client);
+    }
+
+    /**
+     * Returns the Widget for the given inventory slot (0–27), or null if unavailable.
+     * The inventory container's dynamic children are the 28 item slots.
+     */
+    private Widget getInventorySlotWidget(int slot)
+    {
+        Widget container = client.getWidget(WidgetInfo.INVENTORY);
+        if (container == null)
+        {
+            log.warn("[INVENTORY] getInventorySlotWidget: inventory widget null");
+            return null;
+        }
+        Widget[] children = container.getDynamicChildren();
+        if (children == null || slot >= children.length)
+        {
+            log.warn("[INVENTORY] getInventorySlotWidget: slot {} out of range (children={})",
+                slot, children == null ? "null" : children.length);
+            return null;
+        }
+        return children[slot];
+    }
+
+    private String getItemName(int itemId)
+    {
+        ItemComposition def = client.getItemDefinition(itemId);
+        return (def != null && def.getName() != null) ? def.getName() : "";
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────

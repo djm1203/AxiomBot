@@ -53,8 +53,29 @@ public interface Inventory
 
     /**
      * Uses the item in {@code slot} on the item in {@code targetSlot}.
-     * Fires the ITEM_USE + WIDGET_TARGET_ON_WIDGET sequence across two ticks.
-     * The caller must handle the two-tick split via state machine states.
+     * Fires CC_OP "Use" on the source followed immediately by
+     * WIDGET_TARGET_ON_WIDGET on the target — both in the same call.
      */
     void useItemOn(int slot, int targetSlot);
+
+    /**
+     * Resolves both item IDs to their inventory slots, then calls
+     * {@link #useItemOn(int, int)}. No-op if either item is not in inventory.
+     */
+    void useItemOnById(int sourceItemId, int targetItemId);
+
+    /**
+     * Tick 1 of item-on-item: selects the item with the given ID for use
+     * (CC_OP op=2 = "Use"). The item cursor appears on the client.
+     * Call {@link #useSelectedItemOn(int)} on the following tick to complete
+     * the interaction.
+     */
+    void selectItem(int itemId);
+
+    /**
+     * Tick 2 of item-on-item: fires WIDGET_TARGET_ON_WIDGET on the target item
+     * using the previously selected item. Must be called exactly one tick after
+     * {@link #selectItem(int)}.
+     */
+    void useSelectedItemOn(int targetItemId);
 }

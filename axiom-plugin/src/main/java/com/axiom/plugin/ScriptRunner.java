@@ -171,6 +171,12 @@ public class ScriptRunner
                 {
                     activeScript.onLoop();
                     consecutiveErrors = 0;
+                    if (activeScript.isStopRequested())
+                    {
+                        botLog.info(activeScript.getName() + " requested stop — stopping");
+                        stop();
+                        return;
+                    }
                 }
                 catch (Exception e)
                 {
