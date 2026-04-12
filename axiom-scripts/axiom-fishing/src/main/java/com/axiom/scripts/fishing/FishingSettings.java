@@ -14,33 +14,51 @@ public class FishingSettings extends ScriptSettings
     /** The fishing spot type — encodes the NPC ID(s), action name, and action index. */
     public enum SpotType
     {
-        // Item IDs sourced from OSRS Wiki — verify in-game with Item Examiner if a spot
-        // deposits the wrong items.  toolItemId is excluded from depositAllExcept() calls.
-        SHRIMP_ANCHOVIES("Fishing spot", new int[]{ 1525 },          "Small Net", 1, 303),   // Small Fishing Net
-        SARDINE_HERRING ("Fishing spot", new int[]{ 1525 },          "Bait",      1, 307),   // Fishing Rod
-        TROUT_SALMON    ("Fishing spot", new int[]{ 1527 },          "Lure",      1, 309),   // Fly Fishing Rod
-        LOBSTER         ("Cage/Harpoon", new int[]{ 1510 },          "Cage",      1, 301),   // Lobster Pot
-        SWORDFISH_TUNA  ("Cage/Harpoon", new int[]{ 1510 },          "Harpoon",   2, 311),   // Harpoon
-        KARAMBWAN       ("Karambwan vessel", new int[]{ 4712, 4713 },"Fish",      1, 3159),  // Karambwan Vessel
-        MONKFISH        ("Fishing spot", new int[]{ 4316 },          "Small Net", 1, 303),   // Small Fishing Net
-        SHARK           ("Fishing spot", new int[]{ 1535 },          "Harpoon",   1, 311),   // Harpoon
-        BARBARIAN       ("Fishing spot", new int[]{ 1542 },          "Use-rod",   1, 11323); // Barbarian Rod
+        // Net spots (Draynor, Lumbridge Swamp) — 1518 + 1525 confirmed from wiki
+        SHRIMP_ANCHOVIES("Fishing spot",            new int[]{ 1518, 1525 },
+                         "Small Net", 1, new int[]{ 303 }),        // Small Fishing Net
+
+        // Lure/Bait spots (Barbarian Village, Lumbridge) — full ID list from wiki
+        // Feathers (314) protected alongside the rod — consumed as bait, mustn't be deposited
+        TROUT_SALMON    ("Rod Fishing spot",         new int[]{
+                             394, 1506, 1507, 1508, 1509, 1512, 1513,
+                             1515, 1516, 1526, 1527, 1529, 3417, 3418
+                         }, "Lure", 1, new int[]{ 309, 314 }),     // Fly Fishing Rod + Feathers
+
+        // Cage/Harpoon spots (Catherby, Karamja)
+        LOBSTER         ("Fishing spot",             new int[]{ 1510, 1519 },
+                         "Cage",    1, new int[]{ 301 }),           // Lobster Pot
+        SWORDFISH_TUNA  ("Fishing spot",             new int[]{ 1510, 1519 },
+                         "Harpoon", 2, new int[]{ 311 }),           // Harpoon
+
+        // Shark spots
+        SHARK           ("Fishing spot",             new int[]{ 1535 },
+                         "Harpoon", 1, new int[]{ 311 }),           // Harpoon
+
+        // Monkfish (Swan Song quest required)
+        MONKFISH        ("Fishing spot",             new int[]{ 4316 },
+                         "Small Net", 1, new int[]{ 303 }),        // Small Fishing Net
+
+        // Barbarian fishing (Otto's Grotto, Barbarian Training required)
+        // Feathers (314) protected — used as bait with the rod
+        BARBARIAN       ("Fishing spot (barbarian)", new int[]{ 4712, 4713, 7467, 7468 },
+                         "Use-rod", 1, new int[]{ 11323, 314 });   // Barbarian Rod + Feathers
 
         public final String npcName;
         public final int[]  npcIds;
         public final String action;
-        /** 1 = NPC_FIRST_OPTION, 2 = NPC_SECOND_OPTION (used to pick the right menu action). */
+        /** 1 = NPC_FIRST_OPTION, 2 = NPC_SECOND_OPTION. */
         public final int    actionIndex;
-        /** Item ID of the fishing tool to protect when banking (never deposited). */
-        public final int    toolItemId;
+        /** Item IDs to protect from depositAllExcept() — tool(s) and consumable bait. */
+        public final int[]  toolItemIds;
 
-        SpotType(String npcName, int[] npcIds, String action, int actionIndex, int toolItemId)
+        SpotType(String npcName, int[] npcIds, String action, int actionIndex, int[] toolItemIds)
         {
             this.npcName      = npcName;
             this.npcIds       = npcIds;
             this.action       = action;
             this.actionIndex  = actionIndex;
-            this.toolItemId   = toolItemId;
+            this.toolItemIds  = toolItemIds;
         }
 
         /** Returns true if the given NPC ID matches this spot type. */

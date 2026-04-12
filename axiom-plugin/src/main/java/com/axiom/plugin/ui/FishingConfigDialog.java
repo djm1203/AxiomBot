@@ -112,13 +112,11 @@ public class FishingConfigDialog extends ScriptConfigDialog<FishingSettings>
         switch (type)
         {
             case SHRIMP_ANCHOVIES: return "Shrimp / Anchovies";
-            case SARDINE_HERRING:  return "Sardine / Herring";
             case TROUT_SALMON:     return "Trout / Salmon";
             case LOBSTER:          return "Lobster";
             case SWORDFISH_TUNA:   return "Swordfish / Tuna";
-            case KARAMBWAN:        return "Karambwan";
-            case MONKFISH:         return "Monkfish";
             case SHARK:            return "Shark";
+            case MONKFISH:         return "Monkfish";
             case BARBARIAN:        return "Barbarian (rod)";
             default:               return type.name();
         }

@@ -278,7 +278,7 @@ public class FishingScript extends BotScript
 
         // Deposit one item type per tick, protecting the fishing tool.
         // depositAllExcept returns true while work remains; false when clear.
-        if (bank.depositAllExcept(settings.spotType.toolItemId))
+        if (bank.depositAllExcept(settings.spotType.toolItemIds))
         {
             log.debug("[BANKING] Depositing items...");
             setTickDelay(1);
