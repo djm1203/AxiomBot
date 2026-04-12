@@ -13,34 +13,37 @@ import com.axiom.api.util.Antiban;
 import com.axiom.api.util.Log;
 
 import com.axiom.scripts.thieving.ThievingSettings.ThievingMethod;
-import com.axiom.scripts.thieving.ThievingSettings.StallType;
 
 /**
  * Axiom Thieving — two modes: steal from market stalls or pickpocket NPCs.
  *
  * State machine (shared for both modes):
  *   FIND_TARGET — locate the stall or NPC; click the relevant action
- *   ACTING      — wait for animation to complete; handle stun for pickpocket
+ *   ACTING      — wait for the steal/pickpocket to land using inventory change detection
  *
- * The method field in ThievingSettings controls which logic runs in each state.
+ * Success signal — inventory slot count:
+ *   Inventory slot count is snapshotted immediately after clicking the action.
+ *   On each subsequent tick the count is compared. When it increases, a new
+ *   item landed in inventory → steal/pickpocket succeeded.
  *
- * Stall mode:
- *   FIND_TARGET: find the stall by name (equalsIgnoreCase) → "Steal-from"
- *   ACTING:      wait for animation → drop junk if configured → FIND_TARGET
+ *   This is more reliable than animation tracking for stalls because the steal
+ *   animation is 1–2 ticks long and often fires and completes between script ticks.
  *
- * Pickpocket mode:
- *   FIND_TARGET: check stun graphic (245) → find NPC by name → "Pickpocket"
- *   ACTING:      check stun graphic → wait for animation → drop junk → FIND_TARGET
+ *   For pickpockets where the stolen item is coins already present in inventory,
+ *   the slot count does not change (coins stack onto an existing slot). In that
+ *   case the 10-tick timeout fires and the script retries — the coins were still
+ *   added; the retry just starts the next pickpocket.
  *
- * Stun graphic 245 is the THUMP overlay that appears when a pickpocket fails.
- * A 4-tick delay clears the stun window before the next attempt.
+ * Pickpocket stun (graphic 245):
+ *   Checked at the top of both FIND_NPC and PICKPOCKETING handlers.
+ *   A 4-tick delay clears the stun window before the next attempt.
  *
  * API fields are injected by ScriptRunner.injectApis() before onStart().
  * Zero RuneLite imports — axiom-api only.
  */
 @ScriptManifest(
     name        = "Axiom Thieving",
-    version     = "1.0",
+    version     = "1.1",
     category    = ScriptCategory.SKILLING,
     author      = "Axiom",
     description = "Steals from market stalls or pickpockets NPCs."
@@ -62,10 +65,10 @@ public class ThievingScript extends BotScript
     private enum State { FIND_TARGET, ACTING }
     private State state = State.FIND_TARGET;
 
-    // Animation tracking
-    private boolean wasActing         = false;
-    private int     noAnimationTicks  = 0;
-    private static final int ANIMATION_TIMEOUT_TICKS = 10;
+    // Inventory change detection
+    private int inventoryCountBefore = 0;
+    private int noChangeTicks        = 0;
+    private static final int NO_CHANGE_TICKS = 10;
 
     // Pickpocket stun graphic ID (THUMP overlay on player model)
     private static final int STUN_GRAPHIC = 245;
@@ -86,9 +89,9 @@ public class ThievingScript extends BotScript
         antiban.setBreakDurationMinutes(settings.breakDurationMinutes);
         antiban.reset();
 
-        state            = State.FIND_TARGET;
-        wasActing        = false;
-        noAnimationTicks = 0;
+        state                = State.FIND_TARGET;
+        inventoryCountBefore = 0;
+        noChangeTicks        = 0;
 
         if (settings.method == ThievingMethod.STALL)
         {
@@ -144,47 +147,41 @@ public class ThievingScript extends BotScript
             settings.stallType.stallName, stall.getId());
         stall.interact("Steal-from");
 
-        wasActing        = false;
-        noAnimationTicks = 0;
-        setTickDelay(2);
+        // Snapshot inventory size immediately after the click so we can detect
+        // when the stolen item lands in a new slot.
+        inventoryCountBefore = inventory.getCount();
+        noChangeTicks        = 0;
+        setTickDelay(1);
         state = State.ACTING;
     }
 
     private void handleWaitingStall()
     {
-        if (players.isAnimating())
-        {
-            if (!wasActing)
-            {
-                log.info("[WAITING_STALL] Steal animation started");
-                wasActing = true;
-            }
-            noAnimationTicks = 0;
-            return;
-        }
+        int currentCount = inventory.getCount();
 
-        noAnimationTicks++;
-
-        if (wasActing)
+        if (currentCount > inventoryCountBefore)
         {
-            wasActing = false;
-            log.info("[WAITING_STALL] Steal complete");
+            log.info("[WAITING_STALL] Item stolen — slots {} → {}",
+                inventoryCountBefore, currentCount);
             if (settings.dropJunk) dropJunk();
+            noChangeTicks = 0;
             state = State.FIND_TARGET;
+            setTickDelay(Math.max(antiban.reactionTicks(), 1));
             return;
         }
 
-        if (noAnimationTicks >= ANIMATION_TIMEOUT_TICKS)
+        noChangeTicks++;
+        if (noChangeTicks >= NO_CHANGE_TICKS)
         {
-            log.warn("[WAITING_STALL] Steal animation timed out — retrying");
-            noAnimationTicks = 0;
+            log.warn("[WAITING_STALL] No inventory change after {} ticks — retrying",
+                NO_CHANGE_TICKS);
+            noChangeTicks = 0;
             state = State.FIND_TARGET;
         }
         else
         {
-            log.info("[WAITING_STALL] Waiting for steal animation ({}/{})",
-                noAnimationTicks, ANIMATION_TIMEOUT_TICKS);
-            setTickDelay(1);
+            log.info("[WAITING_STALL] Waiting for stolen item ({}/{})",
+                noChangeTicks, NO_CHANGE_TICKS);
         }
     }
 
@@ -217,8 +214,11 @@ public class ThievingScript extends BotScript
             target.getId(), target.getWorldX(), target.getWorldY());
         target.interact("Pickpocket");
 
-        wasActing        = false;
-        noAnimationTicks = 0;
+        // Snapshot inventory size — only detects the pickpocket if a new slot
+        // opens (e.g. first coins, seeds, gems). If coins are already stacked,
+        // count won't change; the 10-tick timeout retries cleanly.
+        inventoryCountBefore = inventory.getCount();
+        noChangeTicks        = 0;
         setTickDelay(1);
         state = State.ACTING;
     }
@@ -229,46 +229,39 @@ public class ThievingScript extends BotScript
         if (players.getGraphic() == STUN_GRAPHIC)
         {
             log.info("[PICKPOCKETING] Stunned — waiting out stun");
-            wasActing        = false;
-            noAnimationTicks = 0;
+            noChangeTicks = 0;
             setTickDelay(4);
             state = State.FIND_TARGET;
             return;
         }
 
-        if (players.isAnimating())
-        {
-            if (!wasActing)
-            {
-                log.info("[PICKPOCKETING] Pickpocket animation started");
-                wasActing = true;
-            }
-            noAnimationTicks = 0;
-            return;
-        }
+        int currentCount = inventory.getCount();
 
-        noAnimationTicks++;
-
-        if (wasActing)
+        if (currentCount > inventoryCountBefore)
         {
-            wasActing = false;
-            log.info("[PICKPOCKETING] Pickpocket complete");
+            log.info("[PICKPOCKETING] Pickpocket landed — slots {} → {}",
+                inventoryCountBefore, currentCount);
             if (settings.dropJunk) dropJunk();
+            noChangeTicks = 0;
             state = State.FIND_TARGET;
+            setTickDelay(Math.max(antiban.reactionTicks(), 1));
             return;
         }
 
-        if (noAnimationTicks >= ANIMATION_TIMEOUT_TICKS)
+        noChangeTicks++;
+        if (noChangeTicks >= NO_CHANGE_TICKS)
         {
-            log.warn("[PICKPOCKETING] Pickpocket animation timed out — retrying");
-            noAnimationTicks = 0;
+            // Timeout — either coins stacked (already had coins) or missed.
+            // Either way, retry immediately.
+            log.info("[PICKPOCKETING] No new slot after {} ticks — retrying",
+                NO_CHANGE_TICKS);
+            noChangeTicks = 0;
             state = State.FIND_TARGET;
         }
         else
         {
-            log.info("[PICKPOCKETING] Waiting for pickpocket animation ({}/{})",
-                noAnimationTicks, ANIMATION_TIMEOUT_TICKS);
-            setTickDelay(1);
+            log.info("[PICKPOCKETING] Waiting for pickpocket result ({}/{})",
+                noChangeTicks, NO_CHANGE_TICKS);
         }
     }
 
@@ -276,7 +269,7 @@ public class ThievingScript extends BotScript
 
     /**
      * Drops all coins (id 995) when inventory is full, freeing space to continue
-     * stealing. For XP-focused sessions where loot accumulation isn't the goal.
+     * stealing. Intended for XP-focused sessions where loot is not the goal.
      */
     private void dropJunk()
     {

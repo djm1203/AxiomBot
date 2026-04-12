@@ -38,6 +38,13 @@ public interface Inventory
     /** Returns the total number of occupied inventory slots. */
     int size();
 
+    /**
+     * Alias for {@link #size()} — use when comparing slot counts to detect
+     * inventory changes after an action (e.g. after stealing from a stall).
+     * Returns the number of non-empty slots, not item quantities.
+     */
+    default int getCount() { return size(); }
+
     /** Returns true if all 28 inventory slots are occupied. */
     boolean isFull();
 
