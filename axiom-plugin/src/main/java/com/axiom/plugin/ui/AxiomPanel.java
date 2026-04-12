@@ -3,7 +3,6 @@ package com.axiom.plugin.ui;
 import com.axiom.api.script.BotScript;
 import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
-import com.axiom.scripts.woodcutting.WoodcuttingScript;
 import com.axiom.plugin.ScriptLoader;
 import com.axiom.plugin.ScriptRunner;
 import com.axiom.plugin.ScriptState;
@@ -13,6 +12,7 @@ import net.runelite.client.ui.PluginPanel;
 import javax.inject.Inject;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -188,32 +188,56 @@ public class AxiomPanel extends PluginPanel
     // ── Config dialog ─────────────────────────────────────────────────────────
 
     /**
-     * Opens the appropriate config dialog for the given script, if one exists.
+     * Opens the config dialog for the given script by naming convention.
      *
-     * Phase 1: explicit instanceof registry — scripts stay Swing-free because
-     * all dialog classes live here in axiom-plugin. When a new script is added,
-     * add a branch below.
+     * Convention: for a script class named XxxScript, look for XxxConfigDialog
+     * in the com.axiom.plugin.ui package. If found, instantiate it and show it.
+     * If not found (ClassNotFoundException), start the script with default settings.
      *
-     * Phase 2: replace with a plugin-side registry populated at script-load time
-     * so the panel doesn't need recompiling for new scripts.
+     * Adding a new script never requires modifying this method — just create the
+     * dialog class in com.axiom.plugin.ui following the naming convention.
      *
-     * Returns the populated ScriptSettings on Start, or null if the user
-     * cancelled or the script has no config dialog.
+     * Returns the populated ScriptSettings, or null if the user cancelled or the
+     * script has no config dialog.
      */
+    @SuppressWarnings("unchecked")
     private ScriptSettings openConfigDialog(BotScript script)
     {
-        ScriptConfigDialog<?> dialog = null;
-
-        if (script instanceof WoodcuttingScript)
+        String simpleName = script.getClass().getSimpleName(); // e.g. "FishingScript"
+        if (!simpleName.endsWith("Script"))
         {
-            dialog = new WoodcuttingConfigDialog(this);
+            log.warn("AxiomPanel: script class {} does not follow XxxScript convention", simpleName);
+            return null;
         }
-        // Add more script types here as they are implemented:
-        // else if (script instanceof FiremakingScript) { dialog = new FiremakingConfigDialog(this); }
 
-        if (dialog == null) return null; // script has no config dialog
+        String baseName  = simpleName.substring(0, simpleName.length() - "Script".length());
+        String dialogFqn = "com.axiom.plugin.ui." + baseName + "ConfigDialog";
 
-        return dialog.showDialog() ? dialog.getSettings() : null;
+        try
+        {
+            Class<?> cls = Class.forName(dialogFqn);
+            if (!ScriptConfigDialog.class.isAssignableFrom(cls))
+            {
+                log.warn("AxiomPanel: {} does not extend ScriptConfigDialog", dialogFqn);
+                return null;
+            }
+
+            ScriptConfigDialog<ScriptSettings> dialog =
+                (ScriptConfigDialog<ScriptSettings>) cls
+                    .getConstructor(JComponent.class)
+                    .newInstance(this);
+
+            return dialog.showDialog() ? dialog.getSettings() : null;
+        }
+        catch (ClassNotFoundException e)
+        {
+            return null; // no config dialog — start with defaults
+        }
+        catch (Exception e)
+        {
+            log.warn("AxiomPanel: could not open config dialog {}: {}", dialogFqn, e.getMessage());
+            return null;
+        }
     }
 
     // ── Status polling ────────────────────────────────────────────────────────

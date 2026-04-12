@@ -21,13 +21,16 @@
             <artifactId>axiom-api</artifactId>
         </dependency>
 
-        <!--
-            Phase 1: woodcutting classes bundled into plugin JAR so ScriptLoader
-            can find them on the classpath. Phase 2: remove this — scripts load via URLClassLoader.
-        -->
+        <!-- Script modules bundled into plugin JAR so ScriptLoader can find them on the classpath -->
         <dependency>
             <groupId>com.axiom</groupId>
             <artifactId>axiom-woodcutting</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-fishing</artifactId>
             <version>${project.version}</version>
         </dependency>
 

@@ -43,19 +43,22 @@ public class BankImpl implements Bank
     @Override
     public boolean isNearBank()
     {
+        // 25-tile Chebyshev radius — covers typical resource-to-bank distances
+        // (Draynor fishing spots are ~16 tiles from the bank; mining, cooking, etc.
+        // can be similarly spaced). The old threshold of 10 was too tight.
         SceneObject obj = findNearestBankObject();
         if (obj != null)
         {
             int dx = Math.abs(obj.getWorldX() - client.getLocalPlayer().getWorldLocation().getX());
             int dy = Math.abs(obj.getWorldY() - client.getLocalPlayer().getWorldLocation().getY());
-            if (Math.max(dx, dy) <= 10) return true;
+            if (Math.max(dx, dy) <= 25) return true;
         }
         SceneObject banker = npcs.nearestByName("Banker");
         if (banker != null)
         {
             int dx = Math.abs(banker.getWorldX() - client.getLocalPlayer().getWorldLocation().getX());
             int dy = Math.abs(banker.getWorldY() - client.getLocalPlayer().getWorldLocation().getY());
-            return Math.max(dx, dy) <= 10;
+            return Math.max(dx, dy) <= 25;
         }
         return false;
     }

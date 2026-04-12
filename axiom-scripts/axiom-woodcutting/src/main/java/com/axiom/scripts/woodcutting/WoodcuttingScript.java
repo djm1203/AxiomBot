@@ -60,6 +60,12 @@ public class WoodcuttingScript extends BotScript
     // the bank open before calling depositAll().
     private boolean bankJustOpened = false;
 
+    // Attempt counter for walking-to-bank. Avoids the hard isNearBank() gate so the
+    // script can handle being 10-20 tiles from the bank (e.g. fishing, mining).
+    // 20 attempts × 3-tick delay ≈ 36 s.
+    private int bankOpenAttempts = 0;
+    private static final int MAX_BANK_OPEN_ATTEMPTS = 20;
+
     // ── Log item IDs for power-chop drop ─────────────────────────────────────
     private static final int[] ALL_LOG_IDS = {
         1511, // Logs (normal)
@@ -236,24 +242,29 @@ public class WoodcuttingScript extends BotScript
         if (!bank.isOpen())
         {
             bankJustOpened = false;
-            if (bank.isNearBank())
+
+            if (bankOpenAttempts >= MAX_BANK_OPEN_ATTEMPTS)
             {
-                log.info("[BANKING] Near bank — opening");
-                bank.openNearest();
-                setTickDelay(2);
-            }
-            else
-            {
-                log.info("[BANKING] Not near a bank — dropping logs instead");
+                log.info("[BANKING] Could not open bank after {} attempts — dropping instead",
+                    MAX_BANK_OPEN_ATTEMPTS);
+                bankOpenAttempts = 0;
                 state = State.DROPPING;
+                return;
             }
+
+            log.info("[BANKING] Opening bank (attempt {}/{})",
+                bankOpenAttempts + 1, MAX_BANK_OPEN_ATTEMPTS);
+            bank.openNearest();
+            bankOpenAttempts++;
+            setTickDelay(3);
             return;
         }
 
+        // Bank is open — reset attempt counter for the next banking cycle.
+        bankOpenAttempts = 0;
+
         if (!bankJustOpened)
         {
-            // First tick seeing the bank open — the deposit-inventory widget isn't
-            // rendered yet. Mark seen and wait 2 ticks before trying to deposit.
             log.info("[BANKING] Bank open — waiting for UI to load");
             bankJustOpened = true;
             setTickDelay(2);
