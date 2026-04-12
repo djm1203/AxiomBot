@@ -17,6 +17,18 @@ public interface Inventory
         return contains(itemId);
     }
 
+    /**
+     * Returns true if the inventory contains at least one item whose ID matches
+     * any entry in {@code itemIds}. Useful for food checks where multiple food
+     * types are acceptable.
+     */
+    default boolean containsAny(int[] itemIds) {
+        for (int id : itemIds) {
+            if (containsById(id)) return true;
+        }
+        return false;
+    }
+
     /** Returns true if the inventory has at least one item whose name contains the string. */
     boolean containsByName(String name);
 

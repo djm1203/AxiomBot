@@ -26,6 +26,7 @@ public class WidgetsImpl implements Widgets
     // Widget group IDs
     private static final int GROUP_MAKE_DIALOG    = 270;
     private static final int GROUP_LEVEL_UP       = 233;
+    private static final int GROUP_SMITHING       = 312;
 
     // Make dialog children
     private static final int CHILD_MAKE_ALL       = 14;  // "Make All" button
@@ -142,6 +143,75 @@ public class WidgetsImpl implements Widgets
             return;
         }
         RobotClick.click(w, client, antiban);
+    }
+
+    @Override
+    public boolean isSmithingDialogOpen()
+    {
+        Widget root = client.getWidget(GROUP_SMITHING, 0);
+        return root != null && !root.isHidden();
+    }
+
+    @Override
+    public void clickSmithingItem(int itemId)
+    {
+        if (!isSmithingDialogOpen())
+        {
+            log.warn("WidgetsImpl.clickSmithingItem: smithing dialog (group {}) not open", GROUP_SMITHING);
+            return;
+        }
+
+        // Scan all fixed children (and their dynamic children) for the target item ID.
+        // The smithing interface uses a grid of item slots; exact child indices vary
+        // by RS version, so we scan broadly and log diagnostics.
+        for (int childIdx = 0; childIdx <= 60; childIdx++)
+        {
+            Widget w = client.getWidget(GROUP_SMITHING, childIdx);
+            if (w == null || w.isHidden()) continue;
+
+            if (w.getItemId() == itemId)
+            {
+                log.info("WidgetsImpl: clicking smithing item id={} at child={}", itemId, childIdx);
+                RobotClick.click(w, client, antiban);
+                return;
+            }
+
+            Widget[] dynamic = w.getDynamicChildren();
+            if (dynamic == null) continue;
+            for (int di = 0; di < dynamic.length; di++)
+            {
+                Widget d = dynamic[di];
+                if (d == null || d.isHidden()) continue;
+                if (d.getItemId() == itemId)
+                {
+                    log.info("WidgetsImpl: clicking smithing item id={} at child={} dynIdx={}", itemId, childIdx, di);
+                    RobotClick.click(d, client, antiban);
+                    return;
+                }
+            }
+        }
+
+        // Item not found — dump visible items to help diagnose widget IDs in-game.
+        log.warn("WidgetsImpl: smithing item id={} not found in group {} — dumping visible items:", itemId, GROUP_SMITHING);
+        for (int childIdx = 0; childIdx <= 60; childIdx++)
+        {
+            Widget w = client.getWidget(GROUP_SMITHING, childIdx);
+            if (w == null || w.isHidden()) continue;
+            if (w.getItemId() > 0)
+            {
+                log.warn("  child={} itemId={} name={}", childIdx, w.getItemId(), w.getName());
+            }
+            Widget[] dynamic = w.getDynamicChildren();
+            if (dynamic == null) continue;
+            for (int di = 0; di < dynamic.length; di++)
+            {
+                Widget d = dynamic[di];
+                if (d != null && !d.isHidden() && d.getItemId() > 0)
+                {
+                    log.warn("  child={} dynIdx={} itemId={} name={}", childIdx, di, d.getItemId(), d.getName());
+                }
+            }
+        }
     }
 
 }

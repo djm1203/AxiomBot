@@ -41,4 +41,10 @@ public interface Players
      * Use this for precise animation detection (e.g. alchemy = 712, chop = 879).
      */
     int getAnimation();
+
+    /**
+     * Returns the current graphic (SpotAnim) ID on the local player, or -1 if none.
+     * Used to detect stun during pickpocketing (graphic 245 = stun hitsplat).
+     */
+    int getGraphic();
 }

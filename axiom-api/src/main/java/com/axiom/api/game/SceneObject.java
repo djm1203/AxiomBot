@@ -37,4 +37,11 @@ public interface SceneObject
      * Equivalent to right-clicking and selecting the action.
      */
     void interact(String action);
+
+    /**
+     * For NPCs: returns true if this NPC is currently engaged in combat with any actor.
+     * Used by the combat script to skip NPCs already being fought by another player.
+     * Always returns false for non-NPC objects (game objects, ground items).
+     */
+    default boolean isInCombat() { return false; }
 }

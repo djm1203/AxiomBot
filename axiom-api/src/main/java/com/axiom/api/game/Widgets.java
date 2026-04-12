@@ -71,4 +71,18 @@ public interface Widgets
      * CC_OP is silently ignored in this RuneLite build.
      */
     void clickWidget(int groupId, int childId);
+
+    /**
+     * Returns true if the smithing interface (group 312) is open.
+     * This is the full-screen dialog shown when clicking an anvil.
+     */
+    boolean isSmithingDialogOpen();
+
+    /**
+     * Clicks the item matching the given item ID inside the smithing dialog.
+     * Scans all children and dynamic children of group 312.
+     * Logs diagnostic info when the item is not found to aid in widget ID discovery.
+     * No-op if the smithing dialog is not open.
+     */
+    void clickSmithingItem(int itemId);
 }

@@ -105,4 +105,11 @@ public class PlayersImpl implements Players
         Player p = client.getLocalPlayer();
         return p != null ? p.getAnimation() : -1;
     }
+
+    @Override
+    public int getGraphic()
+    {
+        Player p = client.getLocalPlayer();
+        return p != null ? p.getGraphic() : -1;
+    }
 }

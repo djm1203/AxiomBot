@@ -92,6 +92,16 @@ public class SceneObjectWrapper implements SceneObject
     @Override public int    getWorldY() { return worldY; }
     @Override public int    getPlane()  { return plane; }
 
+    /**
+     * For NPC wrappers: returns true if the NPC is currently interacting with any actor
+     * (i.e. it is already in combat). Game object wrappers always return false.
+     */
+    @Override
+    public boolean isInCombat()
+    {
+        return npc != null && npc.getInteracting() != null;
+    }
+
     @Override
     public String[] getActions() { return actions; }
 

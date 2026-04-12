@@ -70,6 +70,24 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-smithing</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-combat</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-thieving</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- RuneLite — provided at runtime, never bundled -->
         <dependency>
             <groupId>net.runelite</groupId>
