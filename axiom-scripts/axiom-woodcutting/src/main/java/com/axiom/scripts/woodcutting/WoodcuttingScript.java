@@ -66,6 +66,20 @@ public class WoodcuttingScript extends BotScript
     private int bankOpenAttempts = 0;
     private static final int MAX_BANK_OPEN_ATTEMPTS = 20;
 
+    // ── Axe item IDs — never deposited when banking ───────────────────────────
+    // Bronze through Dragon axes + Crystal axe + Infernal axe
+    private static final int[] AXE_IDS = {
+        1351,  // Bronze axe
+        1349,  // Iron axe
+        1353,  // Steel axe
+        1355,  // Mithril axe
+        1357,  // Adamant axe
+        1359,  // Rune axe
+        6739,  // Dragon axe
+        20014, // Infernal axe
+        23975, // Crystal axe
+    };
+
     // ── Log item IDs for power-chop drop ─────────────────────────────────────
     private static final int[] ALL_LOG_IDS = {
         1511, // Logs (normal)
@@ -271,8 +285,15 @@ public class WoodcuttingScript extends BotScript
             return;
         }
 
-        log.info("[BANKING] Depositing all and closing");
-        bank.depositAll();
+        // Deposit one item type per tick, keeping all axes in the inventory.
+        if (bank.depositAllExcept(AXE_IDS))
+        {
+            log.debug("[BANKING] Depositing items...");
+            setTickDelay(1);
+            return;
+        }
+
+        log.info("[BANKING] Deposit complete — closing bank");
         bank.close();
         bankJustOpened = false;
         setTickDelay(2);

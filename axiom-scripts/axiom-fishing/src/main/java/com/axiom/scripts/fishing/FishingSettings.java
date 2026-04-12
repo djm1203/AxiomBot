@@ -14,28 +14,33 @@ public class FishingSettings extends ScriptSettings
     /** The fishing spot type — encodes the NPC ID(s), action name, and action index. */
     public enum SpotType
     {
-        SHRIMP_ANCHOVIES("Fishing spot", new int[]{ 1525 },       "Small Net", 1),
-        SARDINE_HERRING ("Fishing spot", new int[]{ 1525 },       "Bait",      1),
-        TROUT_SALMON    ("Fishing spot", new int[]{ 1527 },       "Lure",      1),
-        LOBSTER         ("Cage/Harpoon", new int[]{ 1510 },       "Cage",      1),
-        SWORDFISH_TUNA  ("Cage/Harpoon", new int[]{ 1510 },       "Harpoon",   2),
-        KARAMBWAN       ("Karambwan vessel", new int[]{ 4712, 4713 }, "Fish",   1),
-        MONKFISH        ("Fishing spot", new int[]{ 4316 },       "Small Net", 1),
-        SHARK           ("Fishing spot", new int[]{ 1535 },       "Harpoon",   1),
-        BARBARIAN       ("Fishing spot", new int[]{ 1542 },       "Use-rod",   1);
+        // Item IDs sourced from OSRS Wiki — verify in-game with Item Examiner if a spot
+        // deposits the wrong items.  toolItemId is excluded from depositAllExcept() calls.
+        SHRIMP_ANCHOVIES("Fishing spot", new int[]{ 1525 },          "Small Net", 1, 303),   // Small Fishing Net
+        SARDINE_HERRING ("Fishing spot", new int[]{ 1525 },          "Bait",      1, 307),   // Fishing Rod
+        TROUT_SALMON    ("Fishing spot", new int[]{ 1527 },          "Lure",      1, 309),   // Fly Fishing Rod
+        LOBSTER         ("Cage/Harpoon", new int[]{ 1510 },          "Cage",      1, 301),   // Lobster Pot
+        SWORDFISH_TUNA  ("Cage/Harpoon", new int[]{ 1510 },          "Harpoon",   2, 311),   // Harpoon
+        KARAMBWAN       ("Karambwan vessel", new int[]{ 4712, 4713 },"Fish",      1, 3159),  // Karambwan Vessel
+        MONKFISH        ("Fishing spot", new int[]{ 4316 },          "Small Net", 1, 303),   // Small Fishing Net
+        SHARK           ("Fishing spot", new int[]{ 1535 },          "Harpoon",   1, 311),   // Harpoon
+        BARBARIAN       ("Fishing spot", new int[]{ 1542 },          "Use-rod",   1, 11323); // Barbarian Rod
 
         public final String npcName;
         public final int[]  npcIds;
         public final String action;
         /** 1 = NPC_FIRST_OPTION, 2 = NPC_SECOND_OPTION (used to pick the right menu action). */
         public final int    actionIndex;
+        /** Item ID of the fishing tool to protect when banking (never deposited). */
+        public final int    toolItemId;
 
-        SpotType(String npcName, int[] npcIds, String action, int actionIndex)
+        SpotType(String npcName, int[] npcIds, String action, int actionIndex, int toolItemId)
         {
-            this.npcName     = npcName;
-            this.npcIds      = npcIds;
-            this.action      = action;
-            this.actionIndex = actionIndex;
+            this.npcName      = npcName;
+            this.npcIds       = npcIds;
+            this.action       = action;
+            this.actionIndex  = actionIndex;
+            this.toolItemId   = toolItemId;
         }
 
         /** Returns true if the given NPC ID matches this spot type. */

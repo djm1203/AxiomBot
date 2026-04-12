@@ -276,8 +276,16 @@ public class FishingScript extends BotScript
             return;
         }
 
-        log.info("[BANKING] Depositing all and closing");
-        bank.depositAll();
+        // Deposit one item type per tick, protecting the fishing tool.
+        // depositAllExcept returns true while work remains; false when clear.
+        if (bank.depositAllExcept(settings.spotType.toolItemId))
+        {
+            log.debug("[BANKING] Depositing items...");
+            setTickDelay(1);
+            return;
+        }
+
+        log.info("[BANKING] Deposit complete — closing bank");
         bank.close();
         bankJustOpened = false;
         setTickDelay(2);

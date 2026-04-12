@@ -22,6 +22,22 @@ public interface Bank
     void depositAll();
 
     /**
+     * Deposits all inventory items whose IDs are NOT in the protected list.
+     * Sends exactly one deposit action per call (the server processes one
+     * action per tick). Scripts must loop until this returns false:
+     *
+     * <pre>
+     *   if (bank.depositAllExcept(toolId)) { setTickDelay(1); return; }
+     *   // inventory is clean — safe to close
+     * </pre>
+     *
+     * @param protectedIds item IDs to keep (tools, rods, nets, axes, etc.)
+     * @return true if a deposit action was sent (call again next tick),
+     *         false when no unprotected items remain
+     */
+    boolean depositAllExcept(int... protectedIds);
+
+    /**
      * Deposits all items with the given ID.
      * @param itemId the item to deposit
      */

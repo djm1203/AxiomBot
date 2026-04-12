@@ -93,6 +93,39 @@ public class BankImpl implements Bank
     }
 
     @Override
+    public boolean depositAllExcept(int... protectedIds)
+    {
+        Widget container = client.getWidget(WidgetInfo.BANK_INVENTORY_ITEMS_CONTAINER);
+        if (container == null)
+        {
+            log.warn("[BANK] depositAllExcept: inventory widget null");
+            return false;
+        }
+
+        Widget[] slots = container.getDynamicChildren();
+        if (slots == null) return false;
+
+        for (int i = 0; i < slots.length; i++)
+        {
+            Widget w = slots[i];
+            if (w == null || w.getItemId() == -1) continue;
+            if (isProtected(w.getItemId(), protectedIds)) continue;
+
+            // Deposit-All for this item via its slot in the bank inventory panel.
+            // op=4 = Deposit-All in the BANK_INVENTORY_ITEMS_CONTAINER context.
+            client.menuAction(
+                i, container.getId(),
+                MenuAction.CC_OP,
+                4, w.getItemId(),
+                "Deposit-All", ""
+            );
+            log.info("[BANK] depositAllExcept: slot={} itemId={}", i, w.getItemId());
+            return true; // one action per tick — caller retries next tick
+        }
+        return false; // inventory contains only protected items
+    }
+
+    @Override
     public void deposit(int itemId)
     {
         client.menuAction(
@@ -204,6 +237,12 @@ public class BankImpl implements Bank
         {
             log.warn("robotClickWidget failed: {}", e.getMessage());
         }
+    }
+
+    private static boolean isProtected(int itemId, int[] protectedIds)
+    {
+        for (int id : protectedIds) if (id == itemId) return true;
+        return false;
     }
 
     private static int quantityToOp(int quantity)
