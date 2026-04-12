@@ -52,6 +52,18 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-fletching</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.axiom</groupId>
+            <artifactId>axiom-crafting</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- RuneLite — provided at runtime, never bundled -->
         <dependency>
             <groupId>net.runelite</groupId>

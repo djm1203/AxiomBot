@@ -9,6 +9,14 @@ public interface Inventory
     /** Returns true if the inventory has at least one item with the given ID. */
     boolean contains(int itemId);
 
+    /**
+     * Explicit ID-based lookup — use this instead of {@link #contains(int)} to
+     * make intent unambiguous. Delegates to {@code contains(itemId)}.
+     */
+    default boolean containsById(int itemId) {
+        return contains(itemId);
+    }
+
     /** Returns true if the inventory has at least one item whose name contains the string. */
     boolean containsByName(String name);
 

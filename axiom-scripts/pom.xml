@@ -21,6 +21,8 @@
         <module>axiom-firemaking</module>
         <module>axiom-alchemy</module>
         <module>axiom-herblore</module>
+        <module>axiom-fletching</module>
+        <module>axiom-crafting</module>
     </modules>
 
     <!--
