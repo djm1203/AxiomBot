@@ -32,7 +32,7 @@ bin/
 # NetBeans
 nbproject/
 nb-configuration.xml
-
+docs/
 # OS
 .DS_Store
 Thumbs.db
