@@ -27,6 +27,7 @@
         <module>axiom-smithing</module>
         <module>axiom-combat</module>
         <module>axiom-thieving</module>
+        <module>axiom-cooking</module>
     </modules>
 
     <!--
