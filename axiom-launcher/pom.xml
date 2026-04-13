@@ -61,6 +61,15 @@
             <version>1.2.12</version>
         </dependency>
 
+        <!-- JNA — Windows DPAPI key protection (CryptoManager).
+             RuneLite already ships JNA transitively; we declare it explicitly
+             so the launcher fat JAR always bundles the platform binaries. -->
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna-platform</artifactId>
+            <version>5.14.0</version>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -132,5 +141,109 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Release profile — produces an obfuscated axiom-launcher-*-release.jar.
+
+            Usage: mvn clean package -Prelease -DskipTests
+
+            The shade plugin (main build) always runs first and produces the fat JAR.
+            ProGuard then processes that fat JAR in the same 'package' phase.
+
+            Debug fat JAR is preserved unchanged; only the -release.jar is obfuscated.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.wvengen</groupId>
+                        <artifactId>proguard-maven-plugin</artifactId>
+                        <version>2.6.0</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals><goal>proguard</goal></goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <proguardVersion>7.4.2</proguardVersion>
+                            <injar>${project.build.finalName}.jar</injar>
+                            <outjar>${project.build.finalName}-release.jar</outjar>
+                            <outputDirectory>${project.build.directory}</outputDirectory>
+                            <obfuscate>true</obfuscate>
+                            <options>
+                                <!-- ── Entry points ───────────────────────────────── -->
+                                <option>-keep public class com.axiom.launcher.Main {
+                                    public static void main(java.lang.String[]);
+                                }</option>
+
+                                <!-- JavaFX instantiates Application subclasses by reflection -->
+                                <option>-keep public class com.axiom.launcher.AxiomLauncher {
+                                    public *;
+                                }</option>
+
+                                <!-- ── Picocli — reflection on @Command / @Option ──── -->
+                                <option>-keep @picocli.CommandLine.Command class * {
+                                    public *;
+                                }</option>
+                                <option>-keepclassmembers class * {
+                                    @picocli.CommandLine.Option *;
+                                    @picocli.CommandLine.Parameters *;
+                                }</option>
+
+                                <!-- ── JavaFX UI classes (FXML / PropertyValueFactory) ── -->
+                                <option>-keep class com.axiom.launcher.ui.** {
+                                    public *;
+                                }</option>
+
+                                <!-- ── DB POJOs — PropertyValueFactory uses field names ── -->
+                                <option>-keep class com.axiom.launcher.db.** {
+                                    public *;
+                                }</option>
+
+                                <!-- ── Keep all annotations ───────────────────────── -->
+                                <option>-keepattributes *Annotation*</option>
+
+                                <!-- ── Enum reflection ───────────────────────────── -->
+                                <option>-keepclassmembers enum * {
+                                    public static **[] values();
+                                    public static ** valueOf(java.lang.String);
+                                }</option>
+
+                                <!-- ── Provided / bundled libs — suppress missing refs ── -->
+                                <option>-dontwarn javafx.**</option>
+                                <option>-dontwarn picocli.**</option>
+                                <option>-dontwarn org.sqlite.**</option>
+                                <option>-dontwarn org.slf4j.**</option>
+                                <option>-dontwarn ch.qos.logback.**</option>
+                                <option>-dontwarn com.sun.jna.**</option>
+
+                                <!-- ── Source map ───────────────────────────────── -->
+                                <option>-renamesourcefileattribute SourceFile</option>
+                                <option>-keepattributes SourceFile,LineNumberTable</option>
+
+                                <!-- ── Mapping file ─────────────────────────────── -->
+                                <option>-printmapping ${project.build.directory}/proguard-mapping.txt</option>
+
+                                <option>-dontnote **</option>
+                            </options>
+                            <libs>
+                                <lib>${java.home}/jmods</lib>
+                            </libs>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>com.guardsquare</groupId>
+                                <artifactId>proguard-base</artifactId>
+                                <version>7.4.2</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

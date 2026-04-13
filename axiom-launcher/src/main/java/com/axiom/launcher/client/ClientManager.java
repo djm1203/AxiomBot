@@ -3,6 +3,7 @@ package com.axiom.launcher.client;
 import com.axiom.launcher.db.Account;
 import com.axiom.launcher.db.Database;
 import com.axiom.launcher.db.Proxy;
+import com.axiom.launcher.security.FilePermissions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -160,9 +161,10 @@ public class ClientManager
         }
 
         // ── Start process ──────────────────────────────────────────────────
-        log.info("Launching client #{} for account='{}' script='{}' world={}",
-            nextIndex.get(), account.displayName, scriptName, world);
-        log.debug("Command: {}", String.join(" ", cmd));
+        log.info("Launching client #{}: script='{}' world={} account='{}' proxy={}",
+            nextIndex.get(), scriptName, world, account.displayName,
+            proxy != null ? proxy.name : "none");
+        // Never log the full command — it contains proxy credentials as -D system properties
 
         try
         {
@@ -171,11 +173,18 @@ public class ClientManager
 
             // Redirect output to a per-instance log file in ~/.axiom/logs/
             File logsDir = new File(Database.getAxiomDir(), "logs");
-            if (!logsDir.exists()) logsDir.mkdirs();
-            pb.redirectOutput(new File(logsDir,
-                "client-" + nextIndex.get() + "-" + System.currentTimeMillis() + ".log"));
+            if (!logsDir.exists())
+            {
+                logsDir.mkdirs();
+                FilePermissions.setOwnerOnly(logsDir);
+            }
+            File logFile = new File(logsDir,
+                "client-" + nextIndex.get() + "-" + System.currentTimeMillis() + ".log");
+            pb.redirectOutput(logFile);
 
             Process process = pb.start();
+            // Restrict the log file to owner-only after the process creates it
+            FilePermissions.setOwnerOnly(logFile);
             int     index   = nextIndex.getAndIncrement();
 
             ClientInstance instance =

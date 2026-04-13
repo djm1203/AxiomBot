@@ -1,11 +1,15 @@
 package com.axiom.plugin;
 
-import com.axiom.api.util.Antiban;
+import com.axiom.api.script.BotScript;
+import com.axiom.api.script.ScriptSettings;
 import com.axiom.plugin.overlay.BotOverlay;
 import com.axiom.plugin.util.AutoUpdater;
 import com.axiom.plugin.ui.AxiomPanel;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.GameState;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.eventbus.EventBus;
+import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -48,8 +52,10 @@ public class AxiomPlugin extends Plugin
     @Inject private ScriptRunner    scriptRunner;
     @Inject private AxiomPanel      panel;
     @Inject private BotOverlay      botOverlay;
+    @Inject private LauncherBridge  launcherBridge;
 
     private NavigationButton navButton;
+    private boolean          autoStartFired = false;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -61,8 +67,9 @@ public class AxiomPlugin extends Plugin
         // Check for plugin updates in the background (non-blocking)
         AutoUpdater.checkAsync();
 
-        // Register ScriptRunner to receive GameTick + GameStateChanged events
+        // Register ScriptRunner and this plugin to receive game events
         eventBus.register(scriptRunner);
+        eventBus.register(this);
 
         // Register the in-game overlay
         overlayManager.add(botOverlay);
@@ -86,6 +93,7 @@ public class AxiomPlugin extends Plugin
 
         scriptRunner.stop();
         eventBus.unregister(scriptRunner);
+        eventBus.unregister(this);
         overlayManager.remove(botOverlay);
 
         if (navButton != null)
@@ -95,6 +103,44 @@ public class AxiomPlugin extends Plugin
         }
 
         log.info("Axiom stopped");
+    }
+
+    // ── Launcher auto-start ───────────────────────────────────────────────────
+
+    /**
+     * Fires once on the first LOGGED_IN event after the plugin starts.
+     * If the launcher passed {@code -Daxiom.script=<name>}, finds the matching
+     * script, retrieves its default settings, and starts it automatically.
+     */
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event)
+    {
+        if (autoStartFired || event.getGameState() != GameState.LOGGED_IN) return;
+        if (!launcherBridge.isLauncherManaged()) return;
+
+        autoStartFired = true;
+        String targetName = launcherBridge.getScriptName();
+
+        BotScript match = ScriptLoader.loadScripts().stream()
+            .filter(s -> s.getName().equalsIgnoreCase(targetName))
+            .findFirst()
+            .orElse(null);
+
+        if (match == null)
+        {
+            log.warn("LauncherBridge: no script found matching '{}'", targetName);
+            return;
+        }
+
+        ScriptSettings defaults = match.getDefaultSettings();
+        if (defaults == null)
+        {
+            log.warn("LauncherBridge: '{}' has no default settings — cannot auto-start", targetName);
+            return;
+        }
+
+        log.info("LauncherBridge: auto-starting '{}'", targetName);
+        scriptRunner.start(match, defaults);
     }
 
     // ── Icon ──────────────────────────────────────────────────────────────────

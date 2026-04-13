@@ -1,9 +1,11 @@
 package com.axiom.launcher.ui;
 
+import com.axiom.launcher.cli.CsvUtil;
 import com.axiom.launcher.db.Account;
 import com.axiom.launcher.db.AccountRepository;
 import com.axiom.launcher.db.Proxy;
 import com.axiom.launcher.db.ProxyRepository;
+import com.axiom.launcher.util.CsvValidator;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -11,12 +13,17 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Callback;
 
+import java.io.File;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Accounts panel — searchable TableView of managed OSRS accounts with
@@ -84,6 +91,10 @@ public class AccountsView extends VBox
         searchField.setPrefWidth(220);
         searchField.textProperty().addListener((obs, old, now) -> applySearch(now));
 
+        Button importBtn = new Button("Import CSV");
+        importBtn.getStyleClass().add("btn");
+        importBtn.setOnAction(e -> handleCsvImport());
+
         Button addBtn = new Button("+ Add Account");
         addBtn.getStyleClass().addAll("btn", "btn-accent");
         addBtn.setOnAction(e -> new AccountDialog(owner, proxyRepo).showAndWait().ifPresent(a ->
@@ -94,10 +105,122 @@ public class AccountsView extends VBox
 
         Region spacer   = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox toolbar = new HBox(8, searchField, spacer, addBtn);
+        HBox toolbar = new HBox(8, searchField, spacer, importBtn, addBtn);
         toolbar.setAlignment(Pos.CENTER);
 
         getChildren().addAll(title, subtitle, new Separator(), toolbar);
+    }
+
+    private void handleCsvImport()
+    {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Import Accounts CSV");
+        fc.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("CSV files", "*.csv"));
+        File file = fc.showOpenDialog(owner);
+        if (file == null) return;
+
+        List<Map<String, String>> rows;
+        try { rows = CsvUtil.read(file); }
+        catch (Exception e)
+        {
+            new Alert(Alert.AlertType.ERROR, "Could not read CSV: " + e.getMessage()).showAndWait();
+            return;
+        }
+
+        if (rows.isEmpty())
+        {
+            new Alert(Alert.AlertType.INFORMATION, "CSV has no data rows.").showAndWait();
+            return;
+        }
+
+        // Build lookup maps for validation and proxy resolution
+        Map<String, Account> existingByName = accountRepo.findAll().stream()
+            .collect(Collectors.toMap(a -> a.displayName.toLowerCase(), a -> a));
+        Set<String>          proxyNameSet   = proxyRepo.findAll().stream()
+            .map(p -> p.name.toLowerCase())
+            .collect(Collectors.toSet());
+        Map<String, Integer> proxyIdByName  = proxyRepo.findAll().stream()
+            .collect(Collectors.toMap(p -> p.name.toLowerCase(), p -> p.id));
+
+        int inserted = 0, updated = 0, failed = 0;
+        List<String> errorLines = new ArrayList<>();
+
+        for (int i = 0; i < rows.size(); i++)
+        {
+            Map<String, String> row         = rows.get(i);
+            String              displayName = CsvUtil.get(row, "display_name").trim();
+            int                 rowNum      = i + 1;
+
+            if (displayName.isEmpty())
+            {
+                errorLines.add("Row " + rowNum + ": display_name is empty");
+                failed++;
+                continue;
+            }
+
+            CsvValidator.ValidationResult v = CsvValidator.validateAccount(row, proxyNameSet);
+            if (!v.valid)
+            {
+                errorLines.add("Row " + rowNum + " (" + displayName + "): " + v.error);
+                failed++;
+                continue;
+            }
+
+            try
+            {
+                Account existing = existingByName.get(displayName.toLowerCase());
+                Account a        = existing != null ? existing : new Account();
+
+                a.displayName      = displayName;
+                a.jagexCharacterId = CsvUtil.get(row, "jagex_character_id").trim();
+                a.preferredWorld   = CsvUtil.getInt(row, "preferred_world", 0);
+                a.notes            = CsvUtil.get(row, "notes");
+
+                String pin = CsvUtil.get(row, "bank_pin").trim();
+                if (!pin.isEmpty()) a.bankPinEnc = pin;
+
+                String proxyName = CsvUtil.get(row, "proxy_name").trim();
+                if (!proxyName.isEmpty())
+                    a.proxyId = proxyIdByName.getOrDefault(proxyName.toLowerCase(), null);
+
+                if (existing != null)
+                {
+                    accountRepo.update(a);
+                    updated++;
+                }
+                else
+                {
+                    accountRepo.insert(a);
+                    inserted++;
+                }
+            }
+            catch (Exception e)
+            {
+                errorLines.add("Row " + rowNum + " (" + displayName + "): " + e.getMessage());
+                failed++;
+            }
+        }
+
+        refresh();
+
+        // Build result message
+        StringBuilder msg = new StringBuilder();
+        msg.append("Import complete: ")
+           .append(inserted).append(" inserted, ")
+           .append(updated).append(" updated, ")
+           .append(failed).append(" skipped.");
+
+        for (String line : errorLines)
+            msg.append("\n").append(line);
+
+        Alert result = new Alert(
+            failed > 0 ? Alert.AlertType.WARNING : Alert.AlertType.INFORMATION,
+            msg.toString());
+        result.setHeaderText("CSV Import Results");
+        result.initOwner(owner);
+        result.getDialogPane().setPrefWidth(480);
+        result.showAndWait();
     }
 
     @SuppressWarnings("unchecked")

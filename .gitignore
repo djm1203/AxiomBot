@@ -59,10 +59,13 @@ sentry.properties
 *.dsn
 local.properties
 
-# ProGuard output (only committed as release artifacts)
+# ProGuard output — mapping files are sensitive (enable stack-trace de-obfuscation)
+# Store them safely offline; never commit them publicly
 *-obfuscated.jar
+*-release.jar
 proguard_map.txt
 proguard_seed.txt
+**/proguard-mapping.txt
 
 # Maven shade plugin artifact — generated, not source
 dependency-reduced-pom.xml

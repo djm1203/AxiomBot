@@ -74,6 +74,15 @@ public abstract class BotScript
     public abstract String getName();
 
     /**
+     * Override to support launcher auto-start with default settings.
+     * When the launcher passes {@code -Daxiom.script=<name>}, AxiomPlugin
+     * calls this method to obtain the settings to pass to {@link #onStart}.
+     * Returns {@code null} by default — scripts that return null will not be
+     * auto-started (a warning will be logged).
+     */
+    public ScriptSettings getDefaultSettings() { return null; }
+
+    /**
      * Called once when the script is started.
      * Cast {@code settings} to the script's concrete settings class.
      * Set initial state here, validate requirements, log startup info.

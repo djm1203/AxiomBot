@@ -6,6 +6,7 @@ import com.axiom.launcher.db.Database;
 import com.axiom.launcher.db.Proxy;
 import com.axiom.launcher.db.ProxyRepository;
 import com.axiom.launcher.security.CryptoManager;
+import com.axiom.launcher.util.CsvValidator;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -130,10 +131,19 @@ public class ProxiesCommand implements Runnable
             for (int i = 0; i < rows.size(); i++)
             {
                 Map<String, String> row = rows.get(i);
-                String name = CsvUtil.get(row, "name");
+                String name = CsvUtil.get(row, "name").trim();
                 if (name.isEmpty())
                 {
-                    System.err.printf("  Row %d: 'name' is empty — skipped.%n", i + 1);
+                    System.err.printf("  Row %d: name is empty — skipped.%n", i + 1);
+                    failed++;
+                    continue;
+                }
+
+                // Validate before touching the database
+                CsvValidator.ValidationResult validation = CsvValidator.validateProxy(row);
+                if (!validation.valid)
+                {
+                    System.err.printf("  Row %d (%s): %s — skipped.%n", i + 1, name, validation.error);
                     failed++;
                     continue;
                 }

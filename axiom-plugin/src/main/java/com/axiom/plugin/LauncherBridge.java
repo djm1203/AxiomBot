@@ -34,8 +34,13 @@ public class LauncherBridge
         windowY    = parseInt(System.getProperty("axiom.window.y", "0"), 0);
 
         if (!scriptName.isEmpty())
+        {
+            // accountId is a Jagex character ID — redact it in INFO logs to avoid
+            // exposing it in shared log aggregators. Full value is at DEBUG.
             log.info("LauncherBridge: auto-start script='{}'  world={}  account='{}'",
-                scriptName, world, accountId);
+                scriptName, world, redact(accountId));
+            log.debug("LauncherBridge: full account id='{}'", accountId);
+        }
     }
 
     /** Returns the script name to auto-start, or empty string if not set. */
@@ -60,5 +65,12 @@ public class LauncherBridge
     {
         try   { return Integer.parseInt(value); }
         catch (NumberFormatException e) { return fallback; }
+    }
+
+    /** Shows first 2 chars of {@code value} then "***"; fully masks values shorter than 4 chars. */
+    private static String redact(String value)
+    {
+        if (value == null || value.length() < 4) return "***";
+        return value.substring(0, 2) + "***";
     }
 }

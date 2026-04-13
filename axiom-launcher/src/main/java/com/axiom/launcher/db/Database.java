@@ -1,5 +1,6 @@
 package com.axiom.launcher.db;
 
+import com.axiom.launcher.security.FilePermissions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +40,7 @@ public final class Database
         {
             log.warn("Could not create ~/.axiom directory at {}", dir.getAbsolutePath());
         }
+        FilePermissions.setOwnerOnly(dir);
         AXIOM_DIR = dir.getAbsolutePath();
         DB_PATH   = new File(dir, "axiom.db").getAbsolutePath();
     }

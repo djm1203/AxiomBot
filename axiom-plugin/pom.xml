@@ -179,4 +179,103 @@
         </plugins>
     </build>
 
+    <profiles>
+        <!--
+            Release profile — produces an obfuscated axiom-plugin-*-release.jar.
+
+            Usage: mvn clean package -Prelease -DskipTests
+
+            The shade plugin (main build) always runs first and produces the fat JAR.
+            ProGuard then processes that fat JAR in the same 'package' phase.
+
+            The debug fat JAR is preserved unchanged; only the -release.jar is obfuscated.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.wvengen</groupId>
+                        <artifactId>proguard-maven-plugin</artifactId>
+                        <version>2.6.0</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals><goal>proguard</goal></goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <proguardVersion>7.4.2</proguardVersion>
+                            <injar>${project.build.finalName}.jar</injar>
+                            <outjar>${project.build.finalName}-release.jar</outjar>
+                            <outputDirectory>${project.build.directory}</outputDirectory>
+                            <obfuscate>true</obfuscate>
+                            <options>
+                                <!-- ── Entry points RuneLite discovers by reflection ─── -->
+                                <option>-keep public class com.axiom.plugin.AxiomPlugin {
+                                    public *;
+                                }</option>
+
+                                <!-- ── Keep all annotations (ScriptManifest, Subscribe) ─ -->
+                                <option>-keepattributes *Annotation*</option>
+
+                                <!-- ── ScriptLoader finds scripts via @ScriptManifest ─── -->
+                                <option>-keep @com.axiom.api.script.ScriptManifest class * {
+                                    public *;
+                                }</option>
+
+                                <!-- ── ScriptLoader instantiates BotScript subclasses ─── -->
+                                <option>-keep public class * extends com.axiom.api.script.BotScript {
+                                    public *;
+                                }</option>
+
+                                <!-- ── ScriptSettings subclasses passed by type cast ───── -->
+                                <option>-keep public class * extends com.axiom.api.script.ScriptSettings {
+                                    public *;
+                                }</option>
+
+                                <!-- ── Keep full axiom-api public surface ────────────── -->
+                                <option>-keep public class com.axiom.api.** {
+                                    public protected *;
+                                }</option>
+
+                                <!-- ── Keep enum valueOf/values — Java reflection uses them ── -->
+                                <option>-keepclassmembers enum * {
+                                    public static **[] values();
+                                    public static ** valueOf(java.lang.String);
+                                }</option>
+
+                                <!-- ── Provided deps — RuneLite is on the classpath at runtime ── -->
+                                <option>-dontwarn net.runelite.**</option>
+                                <option>-dontwarn lombok.**</option>
+                                <option>-dontwarn org.slf4j.**</option>
+
+                                <!-- ── Source map — strip file names but keep line numbers
+                                         so stack traces can still be de-obfuscated ──────── -->
+                                <option>-renamesourcefileattribute SourceFile</option>
+                                <option>-keepattributes SourceFile,LineNumberTable</option>
+
+                                <!-- ── Mapping file for de-obfuscating crash reports ──── -->
+                                <option>-printmapping ${project.build.directory}/proguard-mapping.txt</option>
+
+                                <!-- ── Suppress noisy notes about duplicate members ────── -->
+                                <option>-dontnote **</option>
+                            </options>
+                            <libs>
+                                <lib>${java.home}/jmods</lib>
+                            </libs>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>com.guardsquare</groupId>
+                                <artifactId>proguard-base</artifactId>
+                                <version>7.4.2</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

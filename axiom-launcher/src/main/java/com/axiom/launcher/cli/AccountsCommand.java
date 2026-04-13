@@ -6,6 +6,7 @@ import com.axiom.launcher.db.Database;
 import com.axiom.launcher.db.Proxy;
 import com.axiom.launcher.db.ProxyRepository;
 import com.axiom.launcher.security.CryptoManager;
+import com.axiom.launcher.util.CsvValidator;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -133,12 +134,26 @@ public class AccountsCommand implements Runnable
             for (int i = 0; i < rows.size(); i++)
             {
                 Map<String, String> row = rows.get(i);
-                String displayName = CsvUtil.get(row, "display_name");
+                String displayName = CsvUtil.get(row, "display_name").trim();
                 if (displayName.isEmpty())
                 {
-                    System.err.printf("  Row %d: 'display_name' is empty — skipped.%n", i + 1);
+                    System.err.printf("  Row %d: display_name is empty — skipped.%n", i + 1);
                     failed++;
                     continue;
+                }
+
+                // Validate before touching the database
+                CsvValidator.ValidationResult validation =
+                    CsvValidator.validateAccount(row, proxyIdByName.keySet());
+                if (!validation.valid)
+                {
+                    System.err.printf("  Row %d (%s): %s — skipped.%n", i + 1, displayName, validation.error);
+                    failed++;
+                    continue;
+                }
+                if (validation.warning != null)
+                {
+                    System.out.printf("  Row %d (%s): warning — %s%n", i + 1, displayName, validation.warning);
                 }
 
                 try

@@ -108,6 +108,9 @@ public class WoodcuttingScript extends BotScript
     public String getName() { return "Axiom Woodcutting"; }
 
     @Override
+    public WoodcuttingSettings getDefaultSettings() { return WoodcuttingSettings.defaults(); }
+
+    @Override
     public void onStart(ScriptSettings raw)
     {
         if (raw instanceof WoodcuttingSettings)
