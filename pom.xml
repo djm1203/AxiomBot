@@ -15,6 +15,7 @@
         <module>axiom-api</module>
         <module>axiom-plugin</module>
         <module>axiom-scripts</module>
+        <module>axiom-launcher</module>
     </modules>
 
     <properties>

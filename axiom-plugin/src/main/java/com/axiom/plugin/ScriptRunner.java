@@ -20,6 +20,7 @@ import com.axiom.plugin.impl.world.WorldHopperImpl;
 import com.axiom.plugin.impl.interaction.InteractionImpl;
 import com.axiom.plugin.impl.interaction.MenuImpl;
 import com.axiom.plugin.impl.PathfinderImpl;
+import com.axiom.plugin.util.SessionStats;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GameState;
@@ -67,10 +68,12 @@ public class ScriptRunner
     private final PathfinderImpl    pathfinder;
     private final Antiban           antiban;
     private final Log               botLog;
+    private final SessionStats      sessionStats;
 
     // ── State ─────────────────────────────────────────────────────────────────
     @Getter private volatile BotScript   activeScript;
     @Getter private volatile ScriptState state = ScriptState.STOPPED;
+    @Getter private volatile long        scriptStartMs = 0;
 
     private volatile ScriptState stateBeforeBreak = ScriptState.STOPPED;
     private volatile boolean     logoutPaused     = false;
@@ -87,28 +90,32 @@ public class ScriptRunner
         BankImpl bank, MovementImpl movement, CameraImpl camera,
         WorldHopperImpl worldHopper, InteractionImpl interaction,
         MenuImpl menu, PathfinderImpl pathfinder,
-        Antiban antiban, Log botLog
+        Antiban antiban, Log botLog, SessionStats sessionStats
     )
     {
-        this.players     = players;
-        this.gameObjects = gameObjects;
-        this.npcs        = npcs;
-        this.groundItems = groundItems;
-        this.widgets     = widgets;
-        this.inventory   = inventory;
-        this.equipment   = equipment;
-        this.skills      = skills;
-        this.prayer      = prayer;
-        this.bank        = bank;
-        this.movement    = movement;
-        this.camera      = camera;
-        this.worldHopper = worldHopper;
-        this.interaction = interaction;
-        this.menu        = menu;
-        this.pathfinder  = pathfinder;
-        this.antiban     = antiban;
-        this.botLog      = botLog;
+        this.players      = players;
+        this.gameObjects  = gameObjects;
+        this.npcs         = npcs;
+        this.groundItems  = groundItems;
+        this.widgets      = widgets;
+        this.inventory    = inventory;
+        this.equipment    = equipment;
+        this.skills       = skills;
+        this.prayer       = prayer;
+        this.bank         = bank;
+        this.movement     = movement;
+        this.camera       = camera;
+        this.worldHopper  = worldHopper;
+        this.interaction  = interaction;
+        this.menu         = menu;
+        this.pathfinder   = pathfinder;
+        this.antiban      = antiban;
+        this.botLog       = botLog;
+        this.sessionStats = sessionStats;
     }
+
+    /** Returns the live session stats for the current or most recent script run. */
+    public SessionStats getSessionStats() { return sessionStats; }
 
     // ── Event handlers ────────────────────────────────────────────────────────
 
@@ -171,6 +178,11 @@ public class ScriptRunner
                 {
                     activeScript.onLoop();
                     consecutiveErrors = 0;
+                    sessionStats.onTick();
+                    for (String msg : sessionStats.pollLevelUps())
+                    {
+                        botLog.info(msg);
+                    }
                     if (activeScript.isStopRequested())
                     {
                         botLog.info(activeScript.getName() + " requested stop — stopping");
@@ -216,6 +228,8 @@ public class ScriptRunner
         antiban.reset();
         consecutiveErrors = 0;
         logoutPaused      = false;
+        scriptStartMs     = System.currentTimeMillis();
+        sessionStats.reset();
         state             = ScriptState.RUNNING;
     }
 
@@ -230,8 +244,10 @@ public class ScriptRunner
         }
         botLog.setScriptName(null);
         botLog.setLoggerClass(com.axiom.api.util.Log.class);
-        logoutPaused = false;
-        state        = ScriptState.STOPPED;
+        sessionStats.stop();
+        scriptStartMs = 0;
+        logoutPaused  = false;
+        state         = ScriptState.STOPPED;
     }
 
     /** Pauses the running script. Resume resumes from the same state. */

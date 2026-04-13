@@ -12,6 +12,7 @@ import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
 import com.axiom.api.util.Antiban;
 import com.axiom.api.util.Log;
+import com.axiom.api.util.Progression;
 import com.axiom.api.world.Bank;
 
 /**
@@ -44,6 +45,9 @@ public class WoodcuttingScript extends BotScript
 
     // ── Settings ──────────────────────────────────────────────────────────────
     private WoodcuttingSettings settings;
+
+    // ── Auto-mode progression ─────────────────────────────────────────────────
+    private Progression progression = null;
 
     // ── Start location — recorded on first game tick, used to walk back after banking ──
     private boolean startTileRecorded = false;
@@ -121,8 +125,19 @@ public class WoodcuttingScript extends BotScript
 
         startTileRecorded = false;
 
-        log.info("Woodcutting started: tree={} action={} powerChop={}",
-            settings.treeType.name(), settings.bankAction.name(), settings.powerChop);
+        if (settings.autoMode)
+        {
+            progression = Progression.parse(settings.progressionString,
+                WoodcuttingSettings.TreeType.OAK.name());
+            log.info("Woodcutting started (auto-mode): progression='{}' action={} powerChop={}",
+                settings.progressionString, settings.bankAction.name(), settings.powerChop);
+        }
+        else
+        {
+            progression = null;
+            log.info("Woodcutting started: tree={} action={} powerChop={}",
+                settings.treeType.name(), settings.bankAction.name(), settings.powerChop);
+        }
 
         state = State.FIND_TREE;
     }
@@ -156,6 +171,34 @@ public class WoodcuttingScript extends BotScript
         log.info("Woodcutting stopped");
     }
 
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Returns the tree type to target for the current tick.
+     * In auto-mode, resolves the best tree for the player's current
+     * Woodcutting level via the Progression. Falls back to settings.treeType
+     * if the progression yields an unrecognised name.
+     */
+    private WoodcuttingSettings.TreeType getActiveTreeType()
+    {
+        if (progression == null) return settings.treeType;
+
+        int level = skills.getBaseLevel(Skills.Skill.WOODCUTTING);
+        String name = progression.getMethodForLevel(level);
+        if (name == null) return settings.treeType;
+
+        try
+        {
+            return WoodcuttingSettings.TreeType.valueOf(name.toUpperCase());
+        }
+        catch (IllegalArgumentException e)
+        {
+            log.warn("[AUTO] Unknown tree type '{}' from progression — using {}",
+                name, settings.treeType.name());
+            return settings.treeType;
+        }
+    }
+
     // ── State handlers ────────────────────────────────────────────────────────
 
     private void findTree()
@@ -167,7 +210,7 @@ public class WoodcuttingScript extends BotScript
             return;
         }
 
-        WoodcuttingSettings.TreeType tree = settings.treeType;
+        WoodcuttingSettings.TreeType tree = getActiveTreeType();
         SceneObject treeObj = gameObjects.nearest(
             o -> tree.matches(o.getId())
               || o.getName().equalsIgnoreCase(tree.objectName));
@@ -202,7 +245,7 @@ public class WoodcuttingScript extends BotScript
             return;
         }
 
-        WoodcuttingSettings.TreeType tree = settings.treeType;
+        WoodcuttingSettings.TreeType tree = getActiveTreeType();
         SceneObject treeObj = gameObjects.nearest(
             o -> tree.matches(o.getId())
               || o.getName().equalsIgnoreCase(tree.objectName));

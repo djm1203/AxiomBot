@@ -1,15 +1,18 @@
 package com.axiom.plugin.ui;
 
+import com.axiom.api.util.Progression;
 import com.axiom.scripts.woodcutting.WoodcuttingSettings;
 import com.axiom.scripts.woodcutting.WoodcuttingSettings.BankAction;
 import com.axiom.scripts.woodcutting.WoodcuttingSettings.TreeType;
 
+import javax.swing.Box;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
-import java.awt.GridLayout;
+import javax.swing.JTextField;
+import java.awt.Dimension;
 
 /**
  * Configuration dialog for the Woodcutting script.
@@ -24,6 +27,8 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
 {
     // ── Controls ──────────────────────────────────────────────────────────────
     private JComboBox<String> treeCombo;
+    private JCheckBox         autoModeBox;
+    private JTextField        progressionField;
     private JComboBox<String> bankCombo;
     private JCheckBox         powerChopBox;
     private JSpinner          breakIntervalSpinner;
@@ -49,12 +54,30 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
         // ── Section: Tree ──────────────────────────────────────────────────
         AxiomSectionPanel treeSection = new AxiomSectionPanel("TREE SELECTION");
 
+        autoModeBox = makeCheckBox("Auto-select tree by Woodcutting level", false);
+        treeSection.addCheckRow("", autoModeBox);
+
         treeCombo = makeCombo(treeNames());
         treeCombo.setSelectedItem("Oak");
         treeSection.addRow("Tree type", treeCombo);
 
+        progressionField = new JTextField(Progression.DEFAULT_WOODCUTTING);
+        progressionField.setFont(progressionField.getFont().deriveFont(11f));
+        progressionField.setBackground(AxiomTheme.BG_INPUT);
+        progressionField.setForeground(AxiomTheme.TEXT);
+        progressionField.setBorder(javax.swing.BorderFactory.createLineBorder(AxiomTheme.BORDER));
+        progressionField.setEnabled(false); // enabled when auto-mode is ticked
+        treeSection.addRow("Progression", progressionField);
+
+        // Toggle tree-combo / progression-field based on auto-mode checkbox
+        autoModeBox.addActionListener(e -> {
+            boolean auto = autoModeBox.isSelected();
+            treeCombo.setEnabled(!auto);
+            progressionField.setEnabled(auto);
+        });
+
         root.add(treeSection);
-        root.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, AxiomTheme.PAD_SM)));
+        root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
         // ── Section: Inventory ─────────────────────────────────────────────
         AxiomSectionPanel invSection = new AxiomSectionPanel("WHEN INVENTORY FULL");
@@ -66,7 +89,7 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
         invSection.addCheckRow("", powerChopBox);
 
         root.add(invSection);
-        root.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, AxiomTheme.PAD_SM)));
+        root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
         // ── Section: Antiban ──────────────────────────────────────────────
         AxiomSectionPanel antibanSection = new AxiomSectionPanel("ANTIBAN / BREAKS");
@@ -78,7 +101,7 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
         antibanSection.addRow("Break length (min)", breakDurationSpinner);
 
         root.add(antibanSection);
-        root.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, AxiomTheme.PAD_SM)));
+        root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
         return root;
     }
@@ -92,10 +115,17 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
             || bankCombo.getSelectedIndex() == 0;
         BankAction bankAction = powerChop ? BankAction.DROP_LOGS : BankAction.BANK;
 
+        boolean autoMode         = autoModeBox.isSelected();
+        String  progressionStr   = progressionField.getText().trim();
+        if (progressionStr.isEmpty()) progressionStr = Progression.DEFAULT_WOODCUTTING;
+
         int breakInterval = (Integer) breakIntervalSpinner.getValue();
         int breakDuration = (Integer) breakDurationSpinner.getValue();
 
-        return new WoodcuttingSettings(treeType, bankAction, powerChop, breakInterval, breakDuration);
+        return new WoodcuttingSettings(
+            treeType, bankAction, powerChop,
+            autoMode, progressionStr,
+            breakInterval, breakDuration);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

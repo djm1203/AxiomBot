@@ -1,6 +1,7 @@
 package com.axiom.scripts.woodcutting;
 
 import com.axiom.api.script.ScriptSettings;
+import com.axiom.api.util.Progression;
 
 /**
  * Configuration for the Woodcutting script.
@@ -48,6 +49,19 @@ public class WoodcuttingSettings extends ScriptSettings
     /** Whether to use power-chopping (drop logs immediately). */
     final boolean powerChop;
 
+    /**
+     * When true, {@code treeType} is ignored and the Progression string is
+     * used to pick the best tree for the player's current Woodcutting level.
+     */
+    final boolean    autoMode;
+
+    /**
+     * Progression string for auto-mode. Parsed by
+     * {@link Progression#parse(String)} at script start.
+     * Default: {@code "1:Oak,30:Willow,45:Maple,60:Yew,75:Magic"}
+     */
+    final String     progressionString;
+
     /** Minimum break interval in minutes (antiban hint). */
     final int breakIntervalMinutes;
 
@@ -58,12 +72,16 @@ public class WoodcuttingSettings extends ScriptSettings
         TreeType treeType,
         BankAction bankAction,
         boolean powerChop,
+        boolean autoMode,
+        String progressionString,
         int breakIntervalMinutes,
         int breakDurationMinutes)
     {
         this.treeType             = treeType;
         this.bankAction           = bankAction;
         this.powerChop            = powerChop;
+        this.autoMode             = autoMode;
+        this.progressionString    = progressionString;
         this.breakIntervalMinutes = breakIntervalMinutes;
         this.breakDurationMinutes = breakDurationMinutes;
     }
@@ -71,6 +89,9 @@ public class WoodcuttingSettings extends ScriptSettings
     /** Default settings used when no config dialog is shown. */
     public static WoodcuttingSettings defaults()
     {
-        return new WoodcuttingSettings(TreeType.OAK, BankAction.DROP_LOGS, true, 60, 5);
+        return new WoodcuttingSettings(
+            TreeType.OAK, BankAction.DROP_LOGS, true,
+            false, Progression.DEFAULT_WOODCUTTING,
+            60, 5);
     }
 }

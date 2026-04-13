@@ -1,6 +1,8 @@
 package com.axiom.plugin;
 
 import com.axiom.api.util.Antiban;
+import com.axiom.plugin.overlay.BotOverlay;
+import com.axiom.plugin.util.AutoUpdater;
 import com.axiom.plugin.ui.AxiomPanel;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.eventbus.EventBus;
@@ -8,6 +10,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.Color;
@@ -39,10 +42,12 @@ import java.awt.image.BufferedImage;
 )
 public class AxiomPlugin extends Plugin
 {
-    @Inject private EventBus      eventBus;
-    @Inject private ClientToolbar clientToolbar;
-    @Inject private ScriptRunner  scriptRunner;
-    @Inject private AxiomPanel    panel;
+    @Inject private EventBus        eventBus;
+    @Inject private ClientToolbar   clientToolbar;
+    @Inject private OverlayManager  overlayManager;
+    @Inject private ScriptRunner    scriptRunner;
+    @Inject private AxiomPanel      panel;
+    @Inject private BotOverlay      botOverlay;
 
     private NavigationButton navButton;
 
@@ -53,8 +58,14 @@ public class AxiomPlugin extends Plugin
     {
         log.info("Axiom starting up");
 
+        // Check for plugin updates in the background (non-blocking)
+        AutoUpdater.checkAsync();
+
         // Register ScriptRunner to receive GameTick + GameStateChanged events
         eventBus.register(scriptRunner);
+
+        // Register the in-game overlay
+        overlayManager.add(botOverlay);
 
         // Build and add the navigation button for the side panel
         navButton = NavigationButton.builder()
@@ -75,6 +86,7 @@ public class AxiomPlugin extends Plugin
 
         scriptRunner.stop();
         eventBus.unregister(scriptRunner);
+        overlayManager.remove(botOverlay);
 
         if (navButton != null)
         {
