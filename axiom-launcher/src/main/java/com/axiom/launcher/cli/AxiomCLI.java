@@ -5,20 +5,26 @@ import picocli.CommandLine.Command;
 /**
  * Root picocli command for the Axiom Launcher CLI.
  *
- * Invoked when the launcher is started with any command-line arguments.
- * Subcommands (run, bulk-launch, accounts, proxies) will be added in a
- * follow-up prompt.
+ * Invoked when the launcher is started with any command-line arguments:
+ *   java -jar axiom-launcher.jar [subcommand] [options]
  *
- * Usage:
- *   java -jar axiom-launcher.jar --help
- *   java -jar axiom-launcher.jar run --account 1 --script "Axiom Fishing"
+ * Subcommands:
+ *   run           — launch a single RuneLite client
+ *   bulk-launch   — launch multiple clients from a CSV file
+ *   accounts      — list / import / export OSRS accounts
+ *   proxies       — list / import / export proxy configurations
  */
 @Command(
-    name            = "axiom",
+    name                   = "axiom",
     mixinStandardHelpOptions = true,
-    version         = "Axiom Launcher 1.0",
-    description     = "Multi-client OSRS launcher and bot manager.",
-    subcommands     = {}   // subcommands registered here in follow-up prompts
+    version                = "Axiom Launcher 1.0",
+    description            = "Multi-client OSRS launcher and bot manager.",
+    subcommands            = {
+        RunCommand.class,
+        BulkLaunchCommand.class,
+        AccountsCommand.class,
+        ProxiesCommand.class
+    }
 )
 public class AxiomCLI implements Runnable
 {
