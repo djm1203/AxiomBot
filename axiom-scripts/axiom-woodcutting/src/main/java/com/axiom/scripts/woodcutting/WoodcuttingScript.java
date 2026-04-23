@@ -1,19 +1,27 @@
 package com.axiom.scripts.woodcutting;
 
 import com.axiom.api.game.GameObjects;
+import com.axiom.api.game.GroundItems;
+import com.axiom.api.game.Npcs;
 import com.axiom.api.game.Players;
 import com.axiom.api.game.SceneObject;
 import com.axiom.api.player.Inventory;
 import com.axiom.api.player.Skills;
 import com.axiom.api.script.BotScript;
-import com.axiom.api.world.Movement;
 import com.axiom.api.script.ScriptCategory;
 import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
 import com.axiom.api.util.Antiban;
+import com.axiom.api.util.InteractionWatchdog;
 import com.axiom.api.util.Log;
+import com.axiom.api.util.Pathfinder;
 import com.axiom.api.util.Progression;
 import com.axiom.api.world.Bank;
+import com.axiom.api.world.LocationProfile;
+import com.axiom.api.world.WorldTile;
+
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Axiom Woodcutting — validation script for the multi-module architecture.
@@ -35,11 +43,13 @@ public class WoodcuttingScript extends BotScript
 {
     // ── Injected by ScriptRunner ──────────────────────────────────────────────
     private GameObjects gameObjects;
+    private GroundItems groundItems;
+    private Npcs        npcs;
     private Players     players;
     private Inventory   inventory;
     private Skills      skills;
     private Bank        bank;
-    private Movement    movement;
+    private Pathfinder  pathfinder;
     private Antiban     antiban;
     private Log         log;
 
@@ -51,7 +61,7 @@ public class WoodcuttingScript extends BotScript
 
     // ── Start location — recorded on first game tick, used to walk back after banking ──
     private boolean startTileRecorded = false;
-    private int     startX, startY;
+    private LocationProfile locationProfile;
 
     // ── State ─────────────────────────────────────────────────────────────────
     private enum State { FIND_TREE, CHOPPING, FULL, BANKING, DROPPING }
@@ -64,6 +74,13 @@ public class WoodcuttingScript extends BotScript
     private boolean wasChopping       = false;
     private int     chopStartTick     = 0;
     private static final int CHOP_TIMEOUT_TICKS = 10;
+    private static final int MAX_TREE_DISTANCE = 16;
+    private static final int TREE_CLUSTER_RADIUS = 3;
+    private static final int TARGET_STICKINESS_RADIUS = 2;
+    private static final int MAX_NEST_LOOT_DISTANCE = 6;
+    private static final int MAX_INTERACTION_RETRIES = 3;
+    private static final int MAX_FORESTRY_EVENT_DISTANCE = 6;
+    private static final int FORESTRY_EVENT_COOLDOWN_TICKS = 5;
 
     // Bank timing: the deposit-inventory button widget isn't available on the same
     // tick that isOpen() first returns true. We wait 2 extra ticks after detecting
@@ -100,6 +117,21 @@ public class WoodcuttingScript extends BotScript
         1513, // Magic logs
         6333, // Teak logs
         6332, // Mahogany logs
+    };
+
+    private int lastTreeId = -1;
+    private int lastTreeX = Integer.MIN_VALUE;
+    private int lastTreeY = Integer.MIN_VALUE;
+    private int lastTreePlane = Integer.MIN_VALUE;
+    private final InteractionWatchdog interactionWatchdog =
+        new InteractionWatchdog(CHOP_TIMEOUT_TICKS, MAX_INTERACTION_RETRIES);
+    private int forestryCooldownTicks = 0;
+    private static final ForestryEvent[] FORESTRY_EVENTS = {
+        new ForestryEvent("Friendly Forester", true, "Talk-to", "Help"),
+        new ForestryEvent("Rising Roots", false, "Chop down", "Chop", "Hack"),
+        new ForestryEvent("Beehive", false, "Feed", "Repair"),
+        new ForestryEvent("Pheasant Nest", false, "Search", "Take"),
+        new ForestryEvent("Ritual Circle", false, "Inspect", "Activate", "Touch")
     };
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -143,6 +175,9 @@ public class WoodcuttingScript extends BotScript
         }
 
         state = State.FIND_TREE;
+        clearLastTree();
+        interactionWatchdog.reset();
+        forestryCooldownTicks = 0;
     }
 
     @Override
@@ -152,10 +187,30 @@ public class WoodcuttingScript extends BotScript
         // so RuneLite API calls there will crash with AssertionError.
         if (!startTileRecorded)
         {
-            startX = players.getWorldX();
-            startY = players.getWorldY();
+            WorldTile startTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+            locationProfile = LocationProfile.centered(
+                "woodcutting-" + settings.locationPreset.name().toLowerCase(),
+                startTile,
+                settings.locationPreset.workAreaRadius
+            ).withBankTargets(
+                settings.locationPreset.bankObjectNames,
+                settings.locationPreset.bankNpcNames,
+                settings.locationPreset.bankActions
+            );
             startTileRecorded = true;
-            log.info("[INIT] Start tile recorded: ({},{})", startX, startY);
+            log.info("[INIT] Start tile recorded: ({},{},{})",
+                startTile.getWorldX(), startTile.getWorldY(), startTile.getPlane());
+            log.info("[INIT] Location preset: {}", settings.locationPreset.displayName);
+        }
+
+        if (forestryCooldownTicks > 0)
+        {
+            forestryCooldownTicks--;
+        }
+
+        if (settings.forestryEnabled && handleForestryEvent())
+        {
+            return;
         }
 
         switch (state)
@@ -171,6 +226,7 @@ public class WoodcuttingScript extends BotScript
     @Override
     public void onStop()
     {
+        forestryCooldownTicks = 0;
         log.info("Woodcutting stopped");
     }
 
@@ -213,10 +269,13 @@ public class WoodcuttingScript extends BotScript
             return;
         }
 
+        if (lootNearbyNest())
+        {
+            return;
+        }
+
         WoodcuttingSettings.TreeType tree = getActiveTreeType();
-        SceneObject treeObj = gameObjects.nearest(
-            o -> tree.matches(o.getId())
-              || o.getName().equalsIgnoreCase(tree.objectName));
+        SceneObject treeObj = selectBestTree(tree);
 
         if (treeObj == null)
         {
@@ -228,10 +287,12 @@ public class WoodcuttingScript extends BotScript
         log.info("[FIND_TREE] Found {} (id={}) at ({},{}) — clicking Chop down",
             tree.objectName, treeObj.getId(), treeObj.getWorldX(), treeObj.getWorldY());
 
+        rememberTree(treeObj);
         treeObj.interact("Chop down");
         state         = State.CHOPPING;
         wasChopping   = false;
         chopStartTick = 0;
+        interactionWatchdog.begin();
 
         // Wait at least 2 ticks so the chop animation has time to register.
         int reactionTicks = Math.max(antiban.reactionTicks(), 2);
@@ -270,6 +331,7 @@ public class WoodcuttingScript extends BotScript
             {
                 log.info("[CHOPPING] Chop started on {} (id={})", tree.objectName, treeObj.getId());
                 wasChopping = true;
+                interactionWatchdog.markSuccess();
             }
             else
             {
@@ -285,6 +347,7 @@ public class WoodcuttingScript extends BotScript
             log.info("[CHOPPING] Chop stopped (tree depleted) — transitioning to FIND_TREE");
             state       = State.FIND_TREE;
             wasChopping = false;
+            rememberTree(treeObj);
         }
         else
         {
@@ -294,8 +357,20 @@ public class WoodcuttingScript extends BotScript
             log.debug("[CHOPPING] Waiting for chop animation ({}/{})", chopStartTick, CHOP_TIMEOUT_TICKS);
             if (chopStartTick >= CHOP_TIMEOUT_TICKS)
             {
-                log.info("[CHOPPING] Timeout waiting for animation — re-clicking");
-                state         = State.FIND_TREE;
+                InteractionWatchdog.Status status = interactionWatchdog.observe(players.isMoving());
+                if (status == InteractionWatchdog.Status.EXHAUSTED)
+                {
+                    log.warn("[CHOPPING] Interaction failed after {}/{} retries — re-acquiring tree",
+                        interactionWatchdog.getAttempts(), interactionWatchdog.getMaxAttempts());
+                    interactionWatchdog.reset();
+                    state = State.FIND_TREE;
+                }
+                else if (status == InteractionWatchdog.Status.RETRY)
+                {
+                    log.info("[CHOPPING] Timeout waiting for animation — re-clicking ({}/{})",
+                        interactionWatchdog.getAttempts(), interactionWatchdog.getMaxAttempts());
+                    state = State.FIND_TREE;
+                }
                 chopStartTick = 0;
             }
         }
@@ -330,7 +405,7 @@ public class WoodcuttingScript extends BotScript
                 return;
             }
 
-            if (bank.openNearest())
+            if (bank.openNearest(locationProfile))
             {
                 log.info("[BANKING] Clicked bank (attempt {}/{})",
                     bankOpenAttempts + 1, MAX_BANK_OPEN_ATTEMPTS);
@@ -350,6 +425,13 @@ public class WoodcuttingScript extends BotScript
 
         if (!bankJustOpened)
         {
+            if (locationProfile != null && !locationProfile.hasBankAnchor())
+            {
+                WorldTile bankTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+                locationProfile = locationProfile.withBankAnchor(bankTile);
+                log.info("[BANKING] Bank anchor recorded: ({},{},{})",
+                    bankTile.getWorldX(), bankTile.getWorldY(), bankTile.getPlane());
+            }
             log.info("[BANKING] Bank open — waiting for UI to load");
             bankJustOpened = true;
             setTickDelay(2);
@@ -368,12 +450,14 @@ public class WoodcuttingScript extends BotScript
         bank.close();
         bankJustOpened = false;
 
-        int distToStart = players.distanceTo(startX, startY);
-        if (distToStart > 10)
+        WorldTile currentTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+        if (locationProfile != null && locationProfile.shouldReturnToWorkArea(currentTile))
         {
+            WorldTile returnAnchor = locationProfile.getReturnAnchor();
+            int distToStart = currentTile.chebyshevDistanceTo(returnAnchor);
             log.info("[BANKING] Walking back to woodcutting area ({},{}) — distance={}",
-                startX, startY, distToStart);
-            movement.walkTo(startX, startY);
+                returnAnchor.getWorldX(), returnAnchor.getWorldY(), distToStart);
+            pathfinder.walkTo(returnAnchor.getWorldX(), returnAnchor.getWorldY(), returnAnchor.getPlane());
             setTickDelay(5);
         }
         else
@@ -398,5 +482,201 @@ public class WoodcuttingScript extends BotScript
         if (dropped == 0) log.info("[DROPPING] No logs found in inventory to drop");
         setTickDelay(1);
         state = State.FIND_TREE;
+    }
+
+    private SceneObject selectBestTree(WoodcuttingSettings.TreeType treeType)
+    {
+        List<SceneObject> trees = gameObjects.all(o ->
+            o.getPlane() == players.getPlane()
+                && players.distanceTo(o.getWorldX(), o.getWorldY()) <= MAX_TREE_DISTANCE
+                && pathfinder.isReachable(o.getWorldX(), o.getWorldY(), o.getPlane())
+                && (treeType.matches(o.getId()) || o.getName().equalsIgnoreCase(treeType.objectName))
+                && o.hasAction("Chop down"));
+
+        return trees.stream()
+            .min(Comparator.comparingInt(tree -> scoreTree(tree, trees)))
+            .orElse(null);
+    }
+
+    private int scoreTree(SceneObject tree, List<SceneObject> trees)
+    {
+        int score = players.distanceTo(tree.getWorldX(), tree.getWorldY()) * 10;
+
+        int nearbyTrees = 0;
+        for (SceneObject other : trees)
+        {
+            if (other == tree) continue;
+            int clusterDistance = Math.max(
+                Math.abs(other.getWorldX() - tree.getWorldX()),
+                Math.abs(other.getWorldY() - tree.getWorldY()));
+            if (clusterDistance <= TREE_CLUSTER_RADIUS)
+            {
+                nearbyTrees++;
+            }
+        }
+        score -= nearbyTrees * 4;
+
+        if (tree.getId() == lastTreeId && tree.getPlane() == lastTreePlane)
+        {
+            int stickyDistance = Math.max(
+                Math.abs(tree.getWorldX() - lastTreeX),
+                Math.abs(tree.getWorldY() - lastTreeY));
+            if (stickyDistance == 0)
+            {
+                score -= 12;
+            }
+            else if (stickyDistance <= TARGET_STICKINESS_RADIUS)
+            {
+                score -= 6;
+            }
+        }
+
+        return score;
+    }
+
+    private boolean lootNearbyNest()
+    {
+        SceneObject nest = groundItems.nearest(item ->
+            item.getName().toLowerCase().contains("nest")
+                && item.hasAction("Take")
+                && item.getPlane() == players.getPlane()
+                && players.distanceTo(item.getWorldX(), item.getWorldY()) <= MAX_NEST_LOOT_DISTANCE
+                && pathfinder.isReachable(item.getWorldX(), item.getWorldY(), item.getPlane()));
+
+        if (nest == null)
+        {
+            return false;
+        }
+
+        log.info("[NEST] Looting {} at ({},{})",
+            nest.getName(), nest.getWorldX(), nest.getWorldY());
+        nest.interact("Take");
+        setTickDelay(2);
+        return true;
+    }
+
+    private boolean handleForestryEvent()
+    {
+        if (forestryCooldownTicks > 0
+                || inventory.isFull()
+                || state == State.BANKING
+                || state == State.DROPPING
+                || players.isAnimating())
+        {
+            return false;
+        }
+
+        SceneObject eventTarget = selectBestForestryEvent();
+        if (eventTarget == null)
+        {
+            return false;
+        }
+
+        String action = resolveForestryAction(eventTarget);
+        if (action == null)
+        {
+            return false;
+        }
+
+        log.info("[FORESTRY] Handling {} via '{}'", eventTarget.getName(), action);
+        eventTarget.interact(action);
+        forestryCooldownTicks = FORESTRY_EVENT_COOLDOWN_TICKS;
+        setTickDelay(2);
+        return true;
+    }
+
+    private SceneObject selectBestForestryEvent()
+    {
+        SceneObject best = null;
+        int bestScore = Integer.MAX_VALUE;
+
+        for (ForestryEvent event : FORESTRY_EVENTS)
+        {
+            SceneObject candidate = event.isNpc
+                ? npcs.nearest(obj -> matchesForestryEvent(obj, event))
+                : gameObjects.nearest(obj -> matchesForestryEvent(obj, event));
+
+            if (candidate == null)
+            {
+                continue;
+            }
+
+            int score = players.distanceTo(candidate.getWorldX(), candidate.getWorldY());
+            if (score < bestScore)
+            {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+
+        return best;
+    }
+
+    private boolean matchesForestryEvent(SceneObject obj, ForestryEvent event)
+    {
+        if (obj == null || obj.getPlane() != players.getPlane())
+        {
+            return false;
+        }
+
+        if (players.distanceTo(obj.getWorldX(), obj.getWorldY()) > MAX_FORESTRY_EVENT_DISTANCE)
+        {
+            return false;
+        }
+
+        return obj.getName() != null
+            && obj.getName().equalsIgnoreCase(event.name)
+            && resolveForestryAction(obj) != null;
+    }
+
+    private String resolveForestryAction(SceneObject obj)
+    {
+        for (ForestryEvent event : FORESTRY_EVENTS)
+        {
+            if (!event.name.equalsIgnoreCase(obj.getName()))
+            {
+                continue;
+            }
+
+            for (String action : event.actions)
+            {
+                if (obj.hasAction(action))
+                {
+                    return action;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void rememberTree(SceneObject tree)
+    {
+        lastTreeId = tree.getId();
+        lastTreeX = tree.getWorldX();
+        lastTreeY = tree.getWorldY();
+        lastTreePlane = tree.getPlane();
+    }
+
+    private void clearLastTree()
+    {
+        lastTreeId = -1;
+        lastTreeX = Integer.MIN_VALUE;
+        lastTreeY = Integer.MIN_VALUE;
+        lastTreePlane = Integer.MIN_VALUE;
+    }
+
+    private static final class ForestryEvent
+    {
+        private final String name;
+        private final boolean isNpc;
+        private final String[] actions;
+
+        private ForestryEvent(String name, boolean isNpc, String... actions)
+        {
+            this.name = name;
+            this.isNpc = isNpc;
+            this.actions = actions;
+        }
     }
 }

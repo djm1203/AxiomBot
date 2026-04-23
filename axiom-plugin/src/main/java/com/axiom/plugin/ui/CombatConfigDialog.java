@@ -4,6 +4,7 @@ import com.axiom.scripts.combat.CombatSettings;
 
 import javax.swing.Box;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
@@ -26,7 +27,18 @@ public class CombatConfigDialog extends ScriptConfigDialog<CombatSettings>
     private JSpinner   eatAtHpSpinner;
     private JTextField foodIdsField;
     private JTextField lootIdsField;
+    private JSpinner   maxLootDistanceSpinner;
+    private JCheckBox  bankForFoodBox;
     private JCheckBox  stopOnFoodBox;
+    private JComboBox<String> combatPrayerCombo;
+    private JCheckBox  safespotBox;
+    private JSpinner   safespotDistanceSpinner;
+    private JCheckBox  cannonBox;
+    private JCheckBox  setupCannonBox;
+    private JSpinner   cannonReloadSpinner;
+    private JCheckBox  aggressionResetBox;
+    private JSpinner   aggressionResetIdleSpinner;
+    private JSpinner   aggressionResetDistanceSpinner;
     private JSpinner   breakIntervalSpinner;
     private JSpinner   breakDurationSpinner;
 
@@ -60,15 +72,42 @@ public class CombatConfigDialog extends ScriptConfigDialog<CombatSettings>
         foodSection.addRow("Eat at HP %", eatAtHpSpinner);
         foodIdsField = makeTextField("379");
         foodSection.addRow("Food IDs (comma-separated)", foodIdsField);
+        bankForFoodBox = makeCheckBox("Bank for more food when inventory is empty", true);
+        foodSection.addCheckRow("", bankForFoodBox);
         stopOnFoodBox = makeCheckBox("Stop when out of food", true);
         foodSection.addCheckRow("", stopOnFoodBox);
+        combatPrayerCombo = makeCombo(prayerDisplayNames());
+        foodSection.addRow("Combat prayer", combatPrayerCombo);
+        safespotBox = makeCheckBox("Hold a safespot anchor between pulls", false);
+        foodSection.addCheckRow("", safespotBox);
+        safespotDistanceSpinner = makeSpinner(1, 12, 6);
+        foodSection.addRow("Safespot target radius", safespotDistanceSpinner);
+        aggressionResetBox = makeCheckBox("Reset aggression after long idle periods", false);
+        foodSection.addCheckRow("", aggressionResetBox);
+        aggressionResetIdleSpinner = makeSpinner(10, 200, 30);
+        foodSection.addRow("Aggro reset idle ticks", aggressionResetIdleSpinner);
+        aggressionResetDistanceSpinner = makeSpinner(3, 30, 12);
+        foodSection.addRow("Aggro reset distance", aggressionResetDistanceSpinner);
         root.add(foodSection);
+        root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
+
+        // ── Section: Cannon ───────────────────────────────────────────────────
+        AxiomSectionPanel cannonSection = new AxiomSectionPanel("CANNON");
+        cannonBox = makeCheckBox("Manage a dwarf multicannon", false);
+        cannonSection.addCheckRow("", cannonBox);
+        setupCannonBox = makeCheckBox("Auto-set up cannon when missing", false);
+        cannonSection.addCheckRow("", setupCannonBox);
+        cannonReloadSpinner = makeSpinner(5, 50, 15);
+        cannonSection.addRow("Reload every N ticks", cannonReloadSpinner);
+        root.add(cannonSection);
         root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
         // ── Section: Looting ──────────────────────────────────────────────────
         AxiomSectionPanel lootSection = new AxiomSectionPanel("LOOTING");
         lootIdsField = makeTextField("Leave blank to skip looting");
         lootSection.addRow("Loot IDs (comma-separated)", lootIdsField);
+        maxLootDistanceSpinner = makeSpinner(1, 25, 10);
+        lootSection.addRow("Max loot distance", maxLootDistanceSpinner);
         root.add(lootSection);
         root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
@@ -95,7 +134,18 @@ public class CombatConfigDialog extends ScriptConfigDialog<CombatSettings>
             (Integer) eatAtHpSpinner.getValue(),
             parseIds(foodIdsField.getText()),
             parseIds(lootIdsField.getText()),
+            (Integer) maxLootDistanceSpinner.getValue(),
+            bankForFoodBox.isSelected(),
             stopOnFoodBox.isSelected(),
+            prayerFromIndex(combatPrayerCombo.getSelectedIndex()),
+            safespotBox.isSelected(),
+            (Integer) safespotDistanceSpinner.getValue(),
+            cannonBox.isSelected(),
+            setupCannonBox.isSelected(),
+            (Integer) cannonReloadSpinner.getValue(),
+            aggressionResetBox.isSelected(),
+            (Integer) aggressionResetIdleSpinner.getValue(),
+            (Integer) aggressionResetDistanceSpinner.getValue(),
             (Integer) breakIntervalSpinner.getValue(),
             (Integer) breakDurationSpinner.getValue()
         );
@@ -114,5 +164,24 @@ public class CombatConfigDialog extends ScriptConfigDialog<CombatSettings>
             catch (NumberFormatException ignored) {}
         }
         return ids.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    private static String[] prayerDisplayNames()
+    {
+        CombatSettings.CombatPrayer[] prayers = CombatSettings.CombatPrayer.values();
+        String[] names = new String[prayers.length];
+        for (int i = 0; i < prayers.length; i++)
+        {
+            names[i] = prayers[i].displayName;
+        }
+        return names;
+    }
+
+    private static CombatSettings.CombatPrayer prayerFromIndex(int index)
+    {
+        CombatSettings.CombatPrayer[] prayers = CombatSettings.CombatPrayer.values();
+        return index >= 0 && index < prayers.length
+            ? prayers[index]
+            : CombatSettings.CombatPrayer.NONE;
     }
 }

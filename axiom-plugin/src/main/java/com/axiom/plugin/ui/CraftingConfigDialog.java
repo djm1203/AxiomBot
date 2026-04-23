@@ -3,6 +3,7 @@ package com.axiom.plugin.ui;
 import com.axiom.scripts.crafting.CraftingSettings;
 import com.axiom.scripts.crafting.CraftingSettings.CraftingMethod;
 import com.axiom.scripts.crafting.CraftingSettings.GemType;
+import com.axiom.scripts.crafting.CraftingSettings.GlassType;
 import com.axiom.scripts.crafting.CraftingSettings.LeatherType;
 
 import javax.swing.Box;
@@ -26,6 +27,7 @@ public class CraftingConfigDialog extends ScriptConfigDialog<CraftingSettings>
     private JComboBox<String> methodCombo;
     private JComboBox<String> gemCombo;
     private JComboBox<String> leatherCombo;
+    private JComboBox<String> glassCombo;
     private JPanel            itemCardPanel;
     private JCheckBox         bankBox;
     private JSpinner          breakIntervalSpinner;
@@ -71,6 +73,11 @@ public class CraftingConfigDialog extends ScriptConfigDialog<CraftingSettings>
         leatherSection.addRow("Item type", leatherCombo);
         itemCardPanel.add(leatherSection, "leather");
 
+        AxiomSectionPanel glassSection = new AxiomSectionPanel("GLASS TYPE");
+        glassCombo = makeCombo(glassDisplayNames());
+        glassSection.addRow("Item type", glassCombo);
+        itemCardPanel.add(glassSection, "glass");
+
         root.add(itemCardPanel);
         root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
@@ -82,6 +89,7 @@ public class CraftingConfigDialog extends ScriptConfigDialog<CraftingSettings>
             {
                 case GEM_CUTTING: cl.show(itemCardPanel, "gem");     break;
                 case LEATHER:     cl.show(itemCardPanel, "leather"); break;
+                case GLASSBLOWING: cl.show(itemCardPanel, "glass");  break;
             }
         });
 
@@ -111,6 +119,7 @@ public class CraftingConfigDialog extends ScriptConfigDialog<CraftingSettings>
             methodFromIndex(methodCombo.getSelectedIndex()),
             gemTypeFromIndex(gemCombo.getSelectedIndex()),
             leatherTypeFromIndex(leatherCombo.getSelectedIndex()),
+            glassTypeFromIndex(glassCombo.getSelectedIndex()),
             bankBox.isSelected(),
             (Integer) breakIntervalSpinner.getValue(),
             (Integer) breakDurationSpinner.getValue()
@@ -149,6 +158,15 @@ public class CraftingConfigDialog extends ScriptConfigDialog<CraftingSettings>
         return names;
     }
 
+    private static String[] glassDisplayNames()
+    {
+        GlassType[] types = GlassType.values();
+        String[] names = new String[types.length];
+        for (int i = 0; i < types.length; i++)
+            names[i] = types[i].productName + " (Lv. " + types[i].levelRequired + ")";
+        return names;
+    }
+
     // ── Index → enum ─────────────────────────────────────────────────────────
 
     private static CraftingMethod methodFromIndex(int idx)
@@ -167,5 +185,11 @@ public class CraftingConfigDialog extends ScriptConfigDialog<CraftingSettings>
     {
         LeatherType[] types = LeatherType.values();
         return (idx >= 0 && idx < types.length) ? types[idx] : LeatherType.LEATHER_GLOVES;
+    }
+
+    private static GlassType glassTypeFromIndex(int idx)
+    {
+        GlassType[] types = GlassType.values();
+        return (idx >= 0 && idx < types.length) ? types[idx] : GlassType.VIAL;
     }
 }

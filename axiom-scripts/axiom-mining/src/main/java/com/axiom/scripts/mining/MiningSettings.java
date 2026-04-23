@@ -10,6 +10,19 @@ import com.axiom.api.script.ScriptSettings;
  */
 public class MiningSettings extends ScriptSettings
 {
+    public enum MiningMethod
+    {
+        STANDARD("Standard rocks"),
+        MOTHERLODE("Motherlode Mine");
+
+        public final String displayName;
+
+        MiningMethod(String displayName)
+        {
+            this.displayName = displayName;
+        }
+    }
+
     public enum MiningAction
     {
         BANK("Bank ores"),
@@ -60,31 +73,39 @@ public class MiningSettings extends ScriptSettings
         }
     }
 
+    public final MiningMethod method;
     public final OreType      oreType;
     public final MiningAction action;
 
     /** True = drop ore immediately on pickup instead of waiting for full inventory. */
     public final boolean powerMine;
 
+    /** When banking coal, use a coal bag if one is in inventory. */
+    public final boolean useCoalBag;
+
     public final int breakIntervalMinutes;
     public final int breakDurationMinutes;
 
     public MiningSettings(
+        MiningMethod  method,
         OreType      oreType,
         MiningAction action,
         boolean      powerMine,
+        boolean      useCoalBag,
         int          breakIntervalMinutes,
         int          breakDurationMinutes)
     {
+        this.method               = method != null ? method : MiningMethod.STANDARD;
         this.oreType              = oreType;
         this.action               = action;
         this.powerMine            = powerMine;
+        this.useCoalBag           = useCoalBag;
         this.breakIntervalMinutes = breakIntervalMinutes;
         this.breakDurationMinutes = breakDurationMinutes;
     }
 
     public static MiningSettings defaults()
     {
-        return new MiningSettings(OreType.IRON, MiningAction.DROP, false, 60, 5);
+        return new MiningSettings(MiningMethod.STANDARD, OreType.IRON, MiningAction.DROP, false, false, 60, 5);
     }
 }

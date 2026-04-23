@@ -11,7 +11,11 @@ import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
 import com.axiom.api.util.Antiban;
 import com.axiom.api.util.Log;
+import com.axiom.api.util.Pathfinder;
+import com.axiom.api.util.ProductionTickTracker;
 import com.axiom.api.world.Bank;
+import com.axiom.api.world.LocationProfile;
+import com.axiom.api.world.WorldTile;
 
 /**
  * Axiom Cooking — cooks raw food on a fire or range using the Make All dialog.
@@ -48,6 +52,7 @@ public class CookingScript extends BotScript
     private Inventory   inventory;
     private Widgets     widgets;
     private Bank        bank;
+    private Pathfinder  pathfinder;
     private Antiban     antiban;
     private Log         log;
 
@@ -61,17 +66,17 @@ public class CookingScript extends BotScript
     // Stored between FIND_OBJECT and USE_FOOD ticks
     private SceneObject cookObjRef = null;
 
-    // Dialog wait timeout
-    private int dialogWaitTicks = 0;
     private static final int DIALOG_TIMEOUT_TICKS = 10;
 
-    // Animation tracking
-    private boolean wasActing        = false;
-    private int     noAnimationTicks = 0;
     private static final int ANIM_TIMEOUT_TICKS = 15; // cooking batches are long
+    private final ProductionTickTracker productionTracker = new ProductionTickTracker();
+    private boolean startTileRecorded = false;
+    private LocationProfile locationProfile;
 
     // Banking state
     private boolean bankJustOpened  = false;
+    private boolean bankDepositDone = false;
+    private boolean bankWithdrawDone = false;
     private int     bankOpenAttempts = 0;
     private static final int MAX_BANK_OPEN_ATTEMPTS = 20;
 
@@ -93,9 +98,10 @@ public class CookingScript extends BotScript
 
         state            = State.FIND_OBJECT;
         cookObjRef       = null;
-        dialogWaitTicks  = 0;
-        wasActing        = false;
-        noAnimationTicks = 0;
+        startTileRecorded = false;
+        locationProfile = null;
+        productionTracker.resetDialog();
+        productionTracker.resetAnimation();
 
         log.info("Cooking started: food={} location={} bankForFood={}",
             settings.foodType.rawName,
@@ -106,6 +112,15 @@ public class CookingScript extends BotScript
     @Override
     public void onLoop()
     {
+        if (!startTileRecorded)
+        {
+            WorldTile startTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+            locationProfile = LocationProfile.centered("cooking", startTile, 10);
+            startTileRecorded = true;
+            log.info("[INIT] Start tile recorded: ({},{},{})",
+                startTile.getWorldX(), startTile.getWorldY(), startTile.getPlane());
+        }
+
         switch (state)
         {
             case FIND_OBJECT:   handleFindObject();   break;
@@ -186,8 +201,7 @@ public class CookingScript extends BotScript
             settings.foodType.rawName, inventory.containsById(settings.foodType.rawId));
 
         cookObjRef       = cookObj;
-        wasActing        = false;
-        noAnimationTicks = 0;
+        productionTracker.resetAnimation();
         setTickDelay(1);
         state = State.USE_FOOD;
     }
@@ -208,27 +222,29 @@ public class CookingScript extends BotScript
             settings.location.objectName, cookObjRef.getId());
         cookObjRef.interact(settings.location.cookAction);
         // cookObjRef intentionally kept alive — WAITING reuses it on animation pause
-        dialogWaitTicks = 0;
+        productionTracker.resetDialog();
         setTickDelay(1);
         state = State.HANDLE_DIALOG;
     }
 
     private void handleDialog()
     {
-        if (!widgets.isMakeDialogOpen())
+        ProductionTickTracker.DialogStatus dialogStatus =
+            productionTracker.observeDialog(widgets.isMakeDialogOpen(), DIALOG_TIMEOUT_TICKS);
+
+        if (dialogStatus != ProductionTickTracker.DialogStatus.OPEN)
         {
-            dialogWaitTicks++;
-            if (dialogWaitTicks >= DIALOG_TIMEOUT_TICKS)
+            if (dialogStatus == ProductionTickTracker.DialogStatus.TIMED_OUT)
             {
                 log.warn("[HANDLE_DIALOG] Cook dialog did not open after {} ticks — retrying",
                     DIALOG_TIMEOUT_TICKS);
-                dialogWaitTicks = 0;
+                productionTracker.resetDialog();
                 state = State.FIND_OBJECT;
             }
             else
             {
                 log.info("[HANDLE_DIALOG] Waiting for cook dialog ({}/{})",
-                    dialogWaitTicks, DIALOG_TIMEOUT_TICKS);
+                    productionTracker.getDialogWaitTicks(), DIALOG_TIMEOUT_TICKS);
                 setTickDelay(1);
             }
             return;
@@ -236,26 +252,29 @@ public class CookingScript extends BotScript
 
         log.info("[HANDLE_DIALOG] Cook dialog open — clicking Make All");
         widgets.clickMakeAll();
-        dialogWaitTicks  = 0;
-        wasActing        = false;
-        noAnimationTicks = 0;
+        productionTracker.resetDialog();
+        productionTracker.resetAnimation();
         setTickDelay(2);
         state = State.WAITING;
     }
 
     private void handleWaiting()
     {
-        if (players.isAnimating())
+        ProductionTickTracker.BatchStatus batchStatus =
+            productionTracker.observeAnimation(players.isAnimating(), ANIM_TIMEOUT_TICKS);
+
+        if (batchStatus == ProductionTickTracker.BatchStatus.STARTED)
         {
-            if (!wasActing) log.info("[WAITING] Cooking animation started");
-            wasActing        = true;
-            noAnimationTicks = 0;
+            log.info("[WAITING] Cooking animation started");
             return;
         }
 
-        noAnimationTicks++;
+        if (batchStatus == ProductionTickTracker.BatchStatus.IN_PROGRESS)
+        {
+            return;
+        }
 
-        if (wasActing)
+        if (batchStatus == ProductionTickTracker.BatchStatus.COMPLETED)
         {
             // Animation stopped — check what happened
             if (!inventory.containsById(settings.foodType.rawId))
@@ -263,47 +282,46 @@ public class CookingScript extends BotScript
                 // All raw food consumed (cooked or burnt)
                 log.info("[WAITING] No raw food remaining — going to {}",
                     settings.bankForFood ? "BANKING" : "FIND_OBJECT");
-                wasActing  = false;
                 cookObjRef = null; // clear stale ref before banking
                 state = settings.bankForFood ? State.BANKING : State.FIND_OBJECT;
                 return;
             }
 
-            if (noAnimationTicks >= 3)
+            // Animation stopped with raw food remaining — re-enter production.
+            if (cookObjRef != null)
             {
-                // Animation paused with raw food remaining (e.g. level-up).
-                // Reuse stored cookObjRef to skip the object search entirely.
-                wasActing        = false;
-                noAnimationTicks = 0;
-                if (cookObjRef != null)
-                {
-                    log.info("[WAITING] Cooking paused — re-clicking stored {} ref",
-                        settings.location.objectName);
-                    inventory.selectItem(settings.foodType.rawId);
-                    setTickDelay(1);
-                    state = State.USE_FOOD;
-                }
-                else
-                {
-                    log.info("[WAITING] Cooking paused — no stored ref, searching again");
-                    state = State.FIND_OBJECT;
-                }
-                return;
+                log.info("[WAITING] Cooking paused — re-clicking stored {} ref",
+                    settings.location.objectName);
+                inventory.selectItem(settings.foodType.rawId);
+                setTickDelay(1);
+                state = State.USE_FOOD;
             }
+            else
+            {
+                log.info("[WAITING] Cooking paused — no stored ref, searching again");
+                state = State.FIND_OBJECT;
+            }
+            return;
         }
 
-        if (noAnimationTicks >= ANIM_TIMEOUT_TICKS)
+        if (batchStatus == ProductionTickTracker.BatchStatus.TIMEOUT)
         {
+            if (widgets.isMakeDialogOpen())
+            {
+                log.warn("[WAITING] Make dialog reopened during batch — resuming dialog handling");
+                state = State.HANDLE_DIALOG;
+                return;
+            }
+
             log.warn("[WAITING] Animation never started after {} ticks — retrying",
                 ANIM_TIMEOUT_TICKS);
-            wasActing        = false;
-            noAnimationTicks = 0;
-            state = State.FIND_OBJECT;
+            productionTracker.resetAnimation();
+            state = cookObjRef != null ? State.USE_FOOD : State.FIND_OBJECT;
         }
         else
         {
             log.info("[WAITING] Waiting for cooking animation ({}/{})",
-                noAnimationTicks, ANIM_TIMEOUT_TICKS);
+                productionTracker.getNoAnimationTicks(), ANIM_TIMEOUT_TICKS);
         }
     }
 
@@ -312,6 +330,8 @@ public class CookingScript extends BotScript
         if (!bank.isOpen())
         {
             bankJustOpened = false;
+            bankDepositDone = false;
+            bankWithdrawDone = false;
 
             if (bankOpenAttempts >= MAX_BANK_OPEN_ATTEMPTS)
             {
@@ -322,7 +342,7 @@ public class CookingScript extends BotScript
                 return;
             }
 
-            if (bank.openNearest())
+            if (bank.openNearest(locationProfile))
             {
                 log.info("[BANKING] Clicked bank (attempt {}/{})",
                     bankOpenAttempts + 1, MAX_BANK_OPEN_ATTEMPTS);
@@ -341,19 +361,30 @@ public class CookingScript extends BotScript
 
         if (!bankJustOpened)
         {
+            if (locationProfile != null && !locationProfile.hasBankAnchor())
+            {
+                WorldTile bankTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+                locationProfile = locationProfile.withBankAnchor(bankTile);
+                log.info("[BANKING] Bank anchor recorded: ({},{},{})",
+                    bankTile.getWorldX(), bankTile.getWorldY(), bankTile.getPlane());
+            }
             log.info("[BANKING] Bank open — waiting for UI to load");
             bankJustOpened = true;
             setTickDelay(2);
             return;
         }
 
-        // Deposit everything — cooked fish, burnt fish, all of it
-        bank.depositAll();
-        log.info("[BANKING] Depositing all items");
-        setTickDelay(1);
+        if (!bankDepositDone)
+        {
+            bank.depositAll();
+            log.info("[BANKING] Depositing all items");
+            bankDepositDone = true;
+            setTickDelay(1);
+            return;
+        }
 
         // Verify raw food is available before withdrawing
-        if (!bank.contains(settings.foodType.rawId))
+        if (!bankWithdrawDone && !bank.contains(settings.foodType.rawId))
         {
             log.warn("[BANKING] No {} left in bank — stopping", settings.foodType.rawName);
             bank.close();
@@ -361,13 +392,40 @@ public class CookingScript extends BotScript
             return;
         }
 
-        log.info("[BANKING] Withdrawing {}...", settings.foodType.rawName);
-        bank.withdrawAll(settings.foodType.rawId);
-        setTickDelay(1);
+        if (!bankWithdrawDone)
+        {
+            log.info("[BANKING] Withdrawing {}...", settings.foodType.rawName);
+            bank.withdrawAll(settings.foodType.rawId);
+            bankWithdrawDone = true;
+            setTickDelay(1);
+            return;
+        }
+
+        if (!inventory.containsById(settings.foodType.rawId))
+        {
+            log.info("[BANKING] Waiting for {} to appear in inventory", settings.foodType.rawName);
+            setTickDelay(1);
+            return;
+        }
 
         log.info("[BANKING] Closing bank");
         bank.close();
         bankJustOpened = false;
+        bankDepositDone = false;
+        bankWithdrawDone = false;
+        cookObjRef = null;
+
+        WorldTile currentTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+        if (locationProfile != null && locationProfile.shouldReturnToWorkArea(currentTile))
+        {
+            WorldTile returnAnchor = locationProfile.getReturnAnchor();
+            log.info("[BANKING] Returning to cooking area ({},{},{})",
+                returnAnchor.getWorldX(), returnAnchor.getWorldY(), returnAnchor.getPlane());
+            pathfinder.walkTo(returnAnchor.getWorldX(), returnAnchor.getWorldY(), returnAnchor.getPlane());
+            setTickDelay(5);
+            state = State.FIND_OBJECT;
+            return;
+        }
 
         setTickDelay(2);
         state = State.FIND_OBJECT;

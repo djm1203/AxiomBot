@@ -1,14 +1,19 @@
 package com.axiom.scripts.alchemy;
 
+import com.axiom.api.game.Messages;
 import com.axiom.api.game.Players;
 import com.axiom.api.game.Widgets;
+import com.axiom.api.player.Equipment;
 import com.axiom.api.player.Inventory;
+import com.axiom.api.player.Skills;
 import com.axiom.api.script.BotScript;
 import com.axiom.api.script.ScriptCategory;
 import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
 import com.axiom.api.util.Antiban;
+import com.axiom.api.util.InventoryDeltaTracker;
 import com.axiom.api.util.Log;
+import com.axiom.api.util.RetryBudget;
 import com.axiom.api.world.Bank;
 
 /**
@@ -34,7 +39,10 @@ public class AlchemyScript extends BotScript
 {
     // ── Injected by ScriptRunner ──────────────────────────────────────────────
     private Inventory inventory;
+    private Equipment equipment;
     private Players   players;
+    private Skills    skills;
+    private Messages  messages;
     private Widgets   widgets;
     private Bank      bank;
     private Antiban   antiban;
@@ -49,10 +57,17 @@ public class AlchemyScript extends BotScript
 
     private boolean wasAnimating     = false;
     private int     noAnimationTicks = 0;
-    // 6 ticks matches the server-side 5-tick alchemy cooldown + 1 grace tick.
-    private static final int ANIMATION_TIMEOUT_TICKS = 6;
+    private int     cooldownTicksRemaining = 0;
+    private final InventoryDeltaTracker itemDeltaTracker = new InventoryDeltaTracker();
+    // 7 ticks = 5-tick alchemy cooldown plus a small grace window.
+    private static final int ANIMATION_TIMEOUT_TICKS = 7;
+    private static final int CAST_COOLDOWN_TICKS = 5;
     // Animation ID 712 = High Alchemy / Low Alchemy cast animation.
     private static final int ALCH_ANIMATION_ID = 712;
+    private static final int NATURE_RUNE_ID = 561;
+    private static final int FIRE_RUNE_ID   = 554;
+    private static final int MAX_SPELL_WIDGET_RETRIES = 4;
+    private final RetryBudget spellWidgetRetries = new RetryBudget(MAX_SPELL_WIDGET_RETRIES);
 
     // Banking
     private boolean bankJustOpened   = false;
@@ -75,10 +90,28 @@ public class AlchemyScript extends BotScript
         antiban.setBreakIntervalMinutes(settings.breakIntervalMinutes);
         antiban.setBreakDurationMinutes(settings.breakDurationMinutes);
         antiban.reset();
+        spellWidgetRetries.reset();
+        itemDeltaTracker.reset();
 
         log.info("Alchemy started: spell={} item='{}' (id={}) bankForItems={}",
             settings.spell.displayName, settings.targetItemName,
             settings.targetItemId, settings.bankForItems);
+
+        if (settings.targetItemId <= 0)
+        {
+            log.warn("Alchemy requires a valid target item ID — stopping");
+            stop();
+            return;
+        }
+
+        int magicLevel = skills.getBaseLevel(Skills.Skill.MAGIC);
+        if (magicLevel < settings.spell.levelRequired)
+        {
+            log.warn("Magic level {} is below the {} requirement for {} — stopping",
+                magicLevel, settings.spell.levelRequired, settings.spell.displayName);
+            stop();
+            return;
+        }
 
         state = State.CAST_SPELL;
     }
@@ -105,6 +138,12 @@ public class AlchemyScript extends BotScript
 
     private void handleCastSpell()
     {
+        if (!hasAlchemyResources())
+        {
+            stop();
+            return;
+        }
+
         if (!inventory.contains(settings.targetItemId))
         {
             if (settings.bankForItems)
@@ -120,15 +159,33 @@ public class AlchemyScript extends BotScript
             return;
         }
 
-        if (!widgets.isWidgetVisible(settings.spell.widgetGroup, settings.spell.widgetChild))
+        boolean spellClicked = widgets.clickWidgetContainingText(
+            settings.spell.widgetGroup, settings.spell.displayName);
+        if (!spellClicked && widgets.isWidgetVisible(settings.spell.widgetGroup, settings.spell.widgetChild))
         {
-            log.warn("[CAST_SPELL] Spell widget not found — is the Magic tab open? Waiting 2 ticks");
+            widgets.clickWidget(settings.spell.widgetGroup, settings.spell.widgetChild);
+            spellClicked = true;
+        }
+
+        if (!spellClicked)
+        {
+            spellWidgetRetries.fail();
+            if (spellWidgetRetries.isExhausted())
+            {
+                log.warn("[CAST_SPELL] Spell widget stayed unavailable after {} retries — stopping",
+                    spellWidgetRetries.getMaxAttempts());
+                stop();
+                return;
+            }
+
+            log.warn("[CAST_SPELL] Spell widget not found — is the Magic tab open? Retry {}/{}",
+                spellWidgetRetries.getAttempts(), spellWidgetRetries.getMaxAttempts());
             setTickDelay(2);
             return;
         }
 
+        spellWidgetRetries.reset();
         log.info("[CAST_SPELL] Clicking {}", settings.spell.displayName);
-        widgets.clickWidget(settings.spell.widgetGroup, settings.spell.widgetChild);
 
         // No delay — spell click and item click fire on consecutive ticks.
         // The 5-tick server cooldown is enforced server-side regardless.
@@ -140,12 +197,14 @@ public class AlchemyScript extends BotScript
         log.info("[SELECT_ITEM] Clicking {} (id={})",
             settings.targetItemName.isEmpty() ? "item" : settings.targetItemName,
             settings.targetItemId);
+        itemDeltaTracker.capture(inventory, settings.targetItemId);
+        cooldownTicksRemaining = CAST_COOLDOWN_TICKS;
         inventory.clickItem(settings.targetItemId);
 
         wasAnimating     = false;
         noAnimationTicks = 0;
 
-        int reactionTicks = Math.max(antiban.reactionTicks(), 2);
+        int reactionTicks = Math.max(antiban.reactionTicks(), 1);
         log.debug("[SELECT_ITEM] Reaction delay: {} ticks before WAITING", reactionTicks);
         setTickDelay(reactionTicks);
         state = State.WAITING;
@@ -153,6 +212,28 @@ public class AlchemyScript extends BotScript
 
     private void handleWaiting()
     {
+        if (messages.pollRecent("don't have enough", 6) != null
+            || messages.pollRecent("do not have enough", 6) != null)
+        {
+            log.warn("[WAITING] Client reported missing runes or requirements — stopping");
+            stop();
+            return;
+        }
+
+        if (messages.pollRecentRegex("can't reach that|nothing interesting happens|you can't cast.*", 6) != null)
+        {
+            log.warn("[WAITING] Cast interaction failed — retrying");
+            resetWaitingState();
+            state = State.CAST_SPELL;
+            return;
+        }
+
+        if (cooldownTicksRemaining > 0)
+        {
+            cooldownTicksRemaining--;
+        }
+
+        boolean itemConsumed = itemDeltaTracker.hasAnyDecrease(inventory);
         if (players.getAnimation() == ALCH_ANIMATION_ID)
         {
             if (!wasAnimating) log.info("[WAITING] Alchemy animation started (id={})", ALCH_ANIMATION_ID);
@@ -164,22 +245,29 @@ public class AlchemyScript extends BotScript
 
         noAnimationTicks++;
 
-        if (wasAnimating)
+        if ((wasAnimating || itemConsumed) && cooldownTicksRemaining <= 0)
         {
             log.info("[WAITING] Cast complete — next cast");
-            wasAnimating = false;
+            resetWaitingState();
             state        = State.CAST_SPELL;
         }
-        else if (noAnimationTicks >= ANIMATION_TIMEOUT_TICKS)
+        else if (noAnimationTicks >= ANIMATION_TIMEOUT_TICKS && cooldownTicksRemaining <= 0)
         {
-            log.info("[WAITING] Animation timeout — retrying from CAST_SPELL");
-            wasAnimating     = false;
-            noAnimationTicks = 0;
-            state            = State.CAST_SPELL;
+            if (itemConsumed)
+            {
+                log.info("[WAITING] Cooldown elapsed with inventory delta — next cast");
+            }
+            else
+            {
+                log.info("[WAITING] Cooldown elapsed without animation or inventory delta — retrying");
+            }
+            resetWaitingState();
+            state = State.CAST_SPELL;
         }
         else
         {
-            log.debug("[WAITING] Waiting for animation ({}/{})", noAnimationTicks, ANIMATION_TIMEOUT_TICKS);
+            log.debug("[WAITING] Waiting for cast completion animTicks={}/{} cooldown={} itemConsumed={}",
+                noAnimationTicks, ANIMATION_TIMEOUT_TICKS, cooldownTicksRemaining, itemConsumed);
         }
     }
 
@@ -244,5 +332,46 @@ public class AlchemyScript extends BotScript
         bankWithdrawDone = false;
         setTickDelay(2);
         state = State.CAST_SPELL;
+    }
+
+    private boolean hasAlchemyResources()
+    {
+        int natureRunes = inventory.count(NATURE_RUNE_ID);
+        if (natureRunes <= 0)
+        {
+            log.warn("[CAST_SPELL] No nature runes available — stopping");
+            return false;
+        }
+
+        if (!hasInfiniteFireSource() && inventory.count(FIRE_RUNE_ID) < settings.spell.fireRuneCost)
+        {
+            log.warn("[CAST_SPELL] Need {} fire runes or a fire staff/tome for {} — stopping",
+                settings.spell.fireRuneCost, settings.spell.displayName);
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean hasInfiniteFireSource()
+    {
+        return equipment.hasItemEquippedByName("staff of fire")
+            || equipment.hasItemEquippedByName("fire battlestaff")
+            || equipment.hasItemEquippedByName("mystic fire battlestaff")
+            || equipment.hasItemEquippedByName("lava battlestaff")
+            || equipment.hasItemEquippedByName("mystic lava battlestaff")
+            || equipment.hasItemEquippedByName("smoke battlestaff")
+            || equipment.hasItemEquippedByName("mystic smoke battlestaff")
+            || equipment.hasItemEquippedByName("steam battlestaff")
+            || equipment.hasItemEquippedByName("mystic steam battlestaff")
+            || equipment.hasItemEquippedByName("tome of fire");
+    }
+
+    private void resetWaitingState()
+    {
+        wasAnimating = false;
+        noAnimationTicks = 0;
+        cooldownTicksRemaining = 0;
+        itemDeltaTracker.reset();
     }
 }

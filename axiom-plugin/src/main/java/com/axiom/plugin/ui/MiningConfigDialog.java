@@ -2,6 +2,7 @@ package com.axiom.plugin.ui;
 
 import com.axiom.scripts.mining.MiningSettings;
 import com.axiom.scripts.mining.MiningSettings.MiningAction;
+import com.axiom.scripts.mining.MiningSettings.MiningMethod;
 import com.axiom.scripts.mining.MiningSettings.OreType;
 
 import javax.swing.Box;
@@ -18,9 +19,11 @@ import java.awt.Dimension;
 public class MiningConfigDialog extends ScriptConfigDialog<MiningSettings>
 {
     // ── Controls ──────────────────────────────────────────────────────────────
+    private JComboBox<String> methodCombo;
     private JComboBox<String> oreCombo;
     private JComboBox<String> actionCombo;
     private JCheckBox         powerMineBox;
+    private JCheckBox         coalBagBox;
     private JSpinner          breakIntervalSpinner;
     private JSpinner          breakDurationSpinner;
 
@@ -41,6 +44,12 @@ public class MiningConfigDialog extends ScriptConfigDialog<MiningSettings>
         root.setBorder(new javax.swing.border.EmptyBorder(
             AxiomTheme.PAD_MD, AxiomTheme.PAD_LG, AxiomTheme.PAD_MD, AxiomTheme.PAD_LG));
 
+        AxiomSectionPanel methodSection = new AxiomSectionPanel("METHOD");
+        methodCombo = makeCombo(methodDisplayNames());
+        methodSection.addRow("Mining mode", methodCombo);
+        root.add(methodSection);
+        root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
+
         // ── Section: Ore ─────────────────────────────────────────────────────
         AxiomSectionPanel oreSection = new AxiomSectionPanel("ORE SELECTION");
         oreCombo = makeCombo(oreDisplayNames());
@@ -55,6 +64,8 @@ public class MiningConfigDialog extends ScriptConfigDialog<MiningSettings>
         actionSection.addRow("Action", actionCombo);
         powerMineBox = makeCheckBox("Power-mine (drop ore without waiting for full inventory)", false);
         actionSection.addCheckRow("", powerMineBox);
+        coalBagBox = makeCheckBox("Use coal bag when mining coal", false);
+        actionSection.addCheckRow("", coalBagBox);
         root.add(actionSection);
         root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
@@ -74,9 +85,11 @@ public class MiningConfigDialog extends ScriptConfigDialog<MiningSettings>
     public MiningSettings getSettings()
     {
         return new MiningSettings(
+            methodFromIndex(methodCombo.getSelectedIndex()),
             oreTypeFromIndex(oreCombo.getSelectedIndex()),
             actionFromIndex(actionCombo.getSelectedIndex()),
             powerMineBox.isSelected(),
+            coalBagBox.isSelected(),
             (Integer) breakIntervalSpinner.getValue(),
             (Integer) breakDurationSpinner.getValue()
         );
@@ -97,6 +110,14 @@ public class MiningConfigDialog extends ScriptConfigDialog<MiningSettings>
         return t.oreName + " (Lv. " + t.levelRequired + ")";
     }
 
+    private static String[] methodDisplayNames()
+    {
+        MiningMethod[] methods = MiningMethod.values();
+        String[] names = new String[methods.length];
+        for (int i = 0; i < methods.length; i++) names[i] = methods[i].displayName;
+        return names;
+    }
+
     private static String[] actionDisplayNames()
     {
         MiningAction[] actions = MiningAction.values();
@@ -111,6 +132,12 @@ public class MiningConfigDialog extends ScriptConfigDialog<MiningSettings>
     {
         OreType[] types = OreType.values();
         return (idx >= 0 && idx < types.length) ? types[idx] : OreType.IRON;
+    }
+
+    private static MiningMethod methodFromIndex(int idx)
+    {
+        MiningMethod[] methods = MiningMethod.values();
+        return (idx >= 0 && idx < methods.length) ? methods[idx] : MiningMethod.STANDARD;
     }
 
     private static MiningAction actionFromIndex(int idx)

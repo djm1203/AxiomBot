@@ -15,6 +15,21 @@ public class SmithingSettings extends ScriptSettings
 {
     /** The hammer item ID — never deposited when banking. */
     public static final int HAMMER_ID = 2347;
+    public static final int AMMO_MOULD_ID = 4;
+
+    public enum SmithingMethod
+    {
+        ANVIL("Anvil smithing"),
+        FURNACE("Furnace smelting"),
+        BLAST_FURNACE("Blast Furnace");
+
+        public final String displayName;
+
+        SmithingMethod(String displayName)
+        {
+            this.displayName = displayName;
+        }
+    }
 
     // ── Bar types ─────────────────────────────────────────────────────────────
 
@@ -36,6 +51,30 @@ public class SmithingSettings extends ScriptSettings
             this.barName       = barName;
             this.barItemId     = barItemId;
             this.levelRequired = levelRequired;
+        }
+    }
+
+    public enum LocationPreset
+    {
+        CUSTOM_START ("Custom / Start Tile", 10, new String[0], new String[]{ "Banker" }, new String[]{ "Bank" }),
+        VARROCK_WEST ("Varrock West",        8,  new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        EDGEVILLE    ("Edgeville",           8,  new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        AL_KHARID    ("Al Kharid",           8,  new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        BLAST_FURNACE("Blast Furnace",      12, new String[]{ "Bank chest" }, new String[]{ "Banker" }, new String[]{ "Use", "Bank" });
+
+        public final String displayName;
+        public final int workAreaRadius;
+        public final String[] bankObjectNames;
+        public final String[] bankNpcNames;
+        public final String[] bankActions;
+
+        LocationPreset(String displayName, int workAreaRadius, String[] bankObjectNames, String[] bankNpcNames, String[] bankActions)
+        {
+            this.displayName = displayName;
+            this.workAreaRadius = workAreaRadius;
+            this.bankObjectNames = bankObjectNames;
+            this.bankNpcNames = bankNpcNames;
+            this.bankActions = bankActions;
         }
     }
 
@@ -104,10 +143,66 @@ public class SmithingSettings extends ScriptSettings
         }
     }
 
+    public enum FurnaceProduct
+    {
+        BRONZE_BAR ("Bronze bar", "Bronze bar", BarType.BRONZE, 436, 438, 0, 0, false, 1),
+        IRON_BAR   ("Iron bar",   "Iron bar",   BarType.IRON,   440, -1,  0, 0, false, 1),
+        STEEL_BAR  ("Steel bar",  "Steel bar",  BarType.STEEL,  440, -1,  453, 2, false, 1),
+        MITHRIL_BAR("Mithril bar","Mithril bar",BarType.MITHRIL,447, -1,  453, 4, false, 1),
+        ADAMANT_BAR("Adamant bar","Adamantite bar",BarType.ADAMANT,449,-1,453,6,false,1),
+        RUNITE_BAR ("Runite bar", "Runite bar", BarType.RUNE,   451, -1,  453, 8, false, 1),
+        CANNONBALL ("Cannonball", "Cannonball", BarType.STEEL,  2353, -1, -1,  0, true, 1);
+
+        public final String displayName;
+        public final String makeOptionText;
+        public final BarType outputBarType;
+        public final int primaryMaterialId;
+        public final int secondaryMaterialId;
+        public final int coalItemId;
+        public final int coalPerPrimary;
+        public final boolean requiresAmmoMould;
+        public final int outputCount;
+
+        FurnaceProduct(
+            String displayName,
+            String makeOptionText,
+            BarType outputBarType,
+            int primaryMaterialId,
+            int secondaryMaterialId,
+            int coalItemId,
+            int coalPerPrimary,
+            boolean requiresAmmoMould,
+            int outputCount)
+        {
+            this.displayName = displayName;
+            this.makeOptionText = makeOptionText;
+            this.outputBarType = outputBarType;
+            this.primaryMaterialId = primaryMaterialId;
+            this.secondaryMaterialId = secondaryMaterialId;
+            this.coalItemId = coalItemId;
+            this.coalPerPrimary = coalPerPrimary;
+            this.requiresAmmoMould = requiresAmmoMould;
+            this.outputCount = outputCount;
+        }
+
+        public boolean requiresCoal()
+        {
+            return coalItemId > 0 && coalPerPrimary > 0;
+        }
+
+        public boolean requiresSecondaryOre()
+        {
+            return secondaryMaterialId > 0;
+        }
+    }
+
     // ── Settings fields ───────────────────────────────────────────────────────
 
+    public final SmithingMethod method;
     public final BarType   barType;
     public final SmithItem smithItem;
+    public final FurnaceProduct furnaceProduct;
+    public final LocationPreset locationPreset;
 
     /**
      * When true and bars run out, bank to withdraw more bars and continue.
@@ -119,14 +214,20 @@ public class SmithingSettings extends ScriptSettings
     public final int breakDurationMinutes;
 
     public SmithingSettings(
+        SmithingMethod method,
         BarType   barType,
         SmithItem smithItem,
+        FurnaceProduct furnaceProduct,
+        LocationPreset locationPreset,
         boolean   bankForBars,
         int       breakIntervalMinutes,
         int       breakDurationMinutes)
     {
+        this.method               = method != null ? method : SmithingMethod.ANVIL;
         this.barType              = barType;
         this.smithItem            = smithItem;
+        this.furnaceProduct       = furnaceProduct != null ? furnaceProduct : FurnaceProduct.IRON_BAR;
+        this.locationPreset       = locationPreset != null ? locationPreset : LocationPreset.CUSTOM_START;
         this.bankForBars          = bankForBars;
         this.breakIntervalMinutes = breakIntervalMinutes;
         this.breakDurationMinutes = breakDurationMinutes;
@@ -135,7 +236,8 @@ public class SmithingSettings extends ScriptSettings
     public static SmithingSettings defaults()
     {
         return new SmithingSettings(
-            BarType.IRON, SmithItem.IRON_DAGGER,
+            SmithingMethod.ANVIL,
+            BarType.IRON, SmithItem.IRON_DAGGER, FurnaceProduct.IRON_BAR, LocationPreset.CUSTOM_START,
             true, 60, 5);
     }
 }

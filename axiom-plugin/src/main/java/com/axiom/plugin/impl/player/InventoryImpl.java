@@ -67,6 +67,28 @@ public class InventoryImpl implements Inventory
     }
 
     @Override
+    public int countByName(String name)
+    {
+        ItemContainer inv = getContainer();
+        if (inv == null || name == null || name.isBlank()) return 0;
+        Item[] items = inv.getItems();
+        if (items == null) return 0;
+
+        int total = 0;
+        for (Item item : items)
+        {
+            if (item == null || item.getId() == -1) continue;
+            ItemComposition def = client.getItemDefinition(item.getId());
+            if (def != null && def.getName() != null
+                && def.getName().toLowerCase().contains(name.toLowerCase()))
+            {
+                total += item.getQuantity() > 0 ? item.getQuantity() : 1;
+            }
+        }
+        return total;
+    }
+
+    @Override
     public int size()
     {
         ItemContainer inv = getContainer();
@@ -250,6 +272,75 @@ public class InventoryImpl implements Inventory
         RobotClick.click(slotWidget, client, antiban);
     }
 
+    @Override
+    public void clickItemAction(int itemId, String action)
+    {
+        int slot = getSlot(itemId);
+        if (slot == -1)
+        {
+            log.warn("[INVENTORY] clickItemAction: item {} not in inventory", itemId);
+            return;
+        }
+
+        int op = resolveInventoryActionOp(itemId, action);
+        if (op == -1)
+        {
+            log.warn("[INVENTORY] clickItemAction: action '{}' unavailable for item {}", action, itemId);
+            return;
+        }
+
+        String itemName = getItemName(itemId);
+        log.info("[INVENTORY] clickItemAction: slot={} itemId={} action='{}' op={}",
+            slot, itemId, action, op);
+        client.menuAction(
+            slot, WidgetInfo.INVENTORY.getId(),
+            MenuAction.CC_OP,
+            op, itemId,
+            action, itemName
+        );
+    }
+
+    @Override
+    public void clickItemByName(String name)
+    {
+        int slot = getSlotByName(name);
+        if (slot == -1)
+        {
+            log.warn("[INVENTORY] clickItemByName: '{}' not in inventory", name);
+            return;
+        }
+
+        Widget slotWidget = getInventorySlotWidget(slot);
+        if (slotWidget == null) return;
+        log.info("[INVENTORY] clickItemByName: slot={} name={}", slot, name);
+        RobotClick.click(slotWidget, client, antiban);
+    }
+
+    @Override
+    public void clickItemActionByName(String name, String action)
+    {
+        int slot = getSlotByName(name);
+        if (slot == -1)
+        {
+            log.warn("[INVENTORY] clickItemActionByName: '{}' not in inventory", name);
+            return;
+        }
+
+        ItemContainer inv = getContainer();
+        if (inv == null)
+        {
+            return;
+        }
+
+        Item[] items = inv.getItems();
+        if (slot >= items.length || items[slot] == null || items[slot].getId() == -1)
+        {
+            return;
+        }
+
+        clickItemAction(items[slot].getId(), action);
+    }
+
     /**
      * Returns the Widget for the given inventory slot (0–27), or null if unavailable.
      * The inventory container's dynamic children are the 28 item slots.
@@ -276,6 +367,47 @@ public class InventoryImpl implements Inventory
     {
         ItemComposition def = client.getItemDefinition(itemId);
         return (def != null && def.getName() != null) ? def.getName() : "";
+    }
+
+    private int resolveInventoryActionOp(int itemId, String action)
+    {
+        if (action == null || action.isBlank())
+        {
+            return -1;
+        }
+
+        String normalized = action.trim();
+        if ("drop".equalsIgnoreCase(normalized))
+        {
+            return 7;
+        }
+        if ("use".equalsIgnoreCase(normalized))
+        {
+            return 2;
+        }
+
+        ItemComposition def = client.getItemDefinition(itemId);
+        if (def == null)
+        {
+            return -1;
+        }
+
+        String[] actions = def.getInventoryActions();
+        if (actions == null)
+        {
+            return -1;
+        }
+
+        for (int i = 0; i < actions.length; i++)
+        {
+            String candidate = actions[i];
+            if (candidate != null && candidate.equalsIgnoreCase(normalized))
+            {
+                return i + 1;
+            }
+        }
+
+        return -1;
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────

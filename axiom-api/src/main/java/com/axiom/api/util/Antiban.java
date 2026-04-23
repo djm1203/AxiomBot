@@ -255,22 +255,27 @@ public class Antiban
      */
     public Point[] mousePath(Point from, Point to, int steps)
     {
+        int actualSteps = Math.max(6, steps + (int) Math.round(random.nextGaussian() * 2.0));
         double midX = (from.x + to.x) / 2.0;
         double midY = (from.y + to.y) / 2.0;
-        double cpX  = midX + random.nextGaussian() * 30;
-        double cpY  = midY + random.nextGaussian() * 30;
+        double cp1X = midX + random.nextGaussian() * 25;
+        double cp1Y = midY + random.nextGaussian() * 25;
+        double cp2X = midX + random.nextGaussian() * 45;
+        double cp2Y = midY + random.nextGaussian() * 45;
 
-        Point[] path = new Point[steps];
-        for (int i = 0; i < steps; i++)
+        Point[] path = new Point[actualSteps];
+        for (int i = 0; i < actualSteps; i++)
         {
-            double t = (double) i / (steps - 1);
-            // Quadratic Bezier: P(t) = (1-t)²·P0 + 2(1-t)t·CP + t²·P1
-            double x = Math.pow(1 - t, 2) * from.x
-                + 2 * (1 - t) * t * cpX
-                + Math.pow(t, 2) * to.x;
-            double y = Math.pow(1 - t, 2) * from.y
-                + 2 * (1 - t) * t * cpY
-                + Math.pow(t, 2) * to.y;
+            double t = actualSteps == 1 ? 1.0 : (double) i / (actualSteps - 1);
+            double oneMinusT = 1.0 - t;
+            double x = Math.pow(oneMinusT, 3) * from.x
+                + 3 * Math.pow(oneMinusT, 2) * t * cp1X
+                + 3 * oneMinusT * t * t * cp2X
+                + t * t * t * to.x;
+            double y = Math.pow(oneMinusT, 3) * from.y
+                + 3 * Math.pow(oneMinusT, 2) * t * cp1Y
+                + 3 * oneMinusT * t * t * cp2Y
+                + t * t * t * to.y;
             path[i] = new Point((int) x, (int) y);
         }
         return path;
@@ -291,10 +296,26 @@ public class Antiban
     {
         if (robot == null) return;
         Point jittered = mouseJitter(new Point(toX, toY));
-        Point[] path   = mousePath(new Point(fromX, fromY), jittered, 12);
+        boolean overshoot = random.nextDouble() < 0.18;
+        Point[] path = overshoot
+            ? composeOvershootPath(new Point(fromX, fromY), jittered)
+            : mousePath(new Point(fromX, fromY), jittered, 12);
+
         for (Point p : path)
         {
             robot.mouseMove(p.x, p.y);
+            if (random.nextDouble() < 0.08)
+            {
+                try
+                {
+                    Thread.sleep(randomDelay(4, 18));
+                }
+                catch (InterruptedException e)
+                {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
     }
 
@@ -358,6 +379,24 @@ public class Antiban
         }
     }
 
+    /**
+     * Small idle-only pause with no camera or tab action. This models the
+     * player watching an animation or reading the screen instead of always
+     * doing an explicit side action.
+     */
+    public void performAttentionDrift()
+    {
+        if (robot == null) return;
+        try
+        {
+            Thread.sleep(randomDelay(120, 450));
+        }
+        catch (InterruptedException e)
+        {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     // ── Session info ──────────────────────────────────────────────────────────
 
     /** Returns how long the current session has been running in milliseconds. */
@@ -380,5 +419,21 @@ public class Antiban
     private static int clamp(int value, int min, int max)
     {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private Point[] composeOvershootPath(Point from, Point to)
+    {
+        int overshootX = to.x + clamp((int) Math.round(random.nextGaussian() * 6), -10, 10);
+        int overshootY = to.y + clamp((int) Math.round(random.nextGaussian() * 6), -10, 10);
+        Point overshoot = new Point(overshootX, overshootY);
+        Point[] primary = mousePath(from, overshoot, 10);
+        Point[] correction = mousePath(overshoot, to, 5);
+        Point[] combined = new Point[primary.length + Math.max(0, correction.length - 1)];
+        System.arraycopy(primary, 0, combined, 0, primary.length);
+        if (correction.length > 1)
+        {
+            System.arraycopy(correction, 1, combined, primary.length, correction.length - 1);
+        }
+        return combined;
     }
 }

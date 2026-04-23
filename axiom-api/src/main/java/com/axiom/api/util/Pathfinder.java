@@ -14,6 +14,15 @@ package com.axiom.api.util;
  */
 public interface Pathfinder
 {
+    enum ProgressState
+    {
+        IDLE,
+        WALKING,
+        ARRIVED,
+        STUCK,
+        UNREACHABLE
+    }
+
     /**
      * Walks to the given world coordinates, handling obstacles automatically.
      * Clicks through doors, gates, and up/down staircases as needed.
@@ -29,4 +38,11 @@ public interface Pathfinder
      * using obstacle-aware pathfinding.
      */
     boolean isReachable(int worldX, int worldY, int plane);
+
+    /**
+     * Returns the most recent pathing progress state for the given target.
+     * Scripts can use this to distinguish "still walking" from "arrived" or
+     * "currently stuck" without reimplementing their own movement heuristics.
+     */
+    ProgressState getProgressTo(int worldX, int worldY, int plane);
 }

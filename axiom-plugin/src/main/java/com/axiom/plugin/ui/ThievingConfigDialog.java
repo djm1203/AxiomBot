@@ -11,8 +11,11 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
+import javax.swing.JTextField;
 import java.awt.Dimension;
 import java.awt.event.ActionListener;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Configuration dialog for the Thieving script.
@@ -28,6 +31,8 @@ public class ThievingConfigDialog extends ScriptConfigDialog<ThievingSettings>
     private JComboBox<String> stallCombo;
     private JComboBox<String> npcCombo;
     private JCheckBox         dropJunkBox;
+    private JCheckBox         stickyTargetBox;
+    private JTextField        foodIdsField;
     private JSpinner          breakIntervalSpinner;
     private JSpinner          breakDurationSpinner;
 
@@ -74,6 +79,10 @@ public class ThievingConfigDialog extends ScriptConfigDialog<ThievingSettings>
         AxiomSectionPanel optionsSection = new AxiomSectionPanel("OPTIONS");
         dropJunkBox = makeCheckBox("Drop items when inventory full (XP mode)", true);
         optionsSection.addCheckRow("", dropJunkBox);
+        stickyTargetBox = makeCheckBox("Use sticky target mode for pickpocketing", false);
+        optionsSection.addCheckRow("", stickyTargetBox);
+        foodIdsField = makeTextField("");
+        optionsSection.addRow("Food IDs (comma-separated)", foodIdsField);
         root.add(optionsSection);
         root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
@@ -102,7 +111,8 @@ public class ThievingConfigDialog extends ScriptConfigDialog<ThievingSettings>
             StallType.values()[stallCombo.getSelectedIndex()],
             NpcTarget.values()[npcCombo.getSelectedIndex()],
             dropJunkBox.isSelected(),
-            new int[0],
+            stickyTargetBox.isSelected(),
+            parseIds(foodIdsField.getText()),
             (Integer) breakIntervalSpinner.getValue(),
             (Integer) breakDurationSpinner.getValue()
         );
@@ -115,6 +125,7 @@ public class ThievingConfigDialog extends ScriptConfigDialog<ThievingSettings>
         boolean isStall = methodCombo.getSelectedIndex() == ThievingMethod.STALL.ordinal();
         stallCombo.setEnabled(isStall);
         npcCombo.setEnabled(!isStall);
+        stickyTargetBox.setEnabled(!isStall);
     }
 
     // ── Display name builders ─────────────────────────────────────────────────
@@ -147,5 +158,17 @@ public class ThievingConfigDialog extends ScriptConfigDialog<ThievingSettings>
             names[i] = targets[i].npcName + " (Lv. " + targets[i].levelRequired + ")";
         }
         return names;
+    }
+
+    private static int[] parseIds(String text)
+    {
+        if (text == null || text.trim().isEmpty()) return new int[0];
+        List<Integer> ids = new ArrayList<>();
+        for (String part : text.split(","))
+        {
+            try { ids.add(Integer.parseInt(part.trim())); }
+            catch (NumberFormatException ignored) {}
+        }
+        return ids.stream().mapToInt(Integer::intValue).toArray();
     }
 }

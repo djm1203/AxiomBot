@@ -35,6 +35,9 @@ public interface Inventory
     /** Returns the count of items with the given ID in the inventory. */
     int count(int itemId);
 
+    /** Returns the total quantity of items whose name contains the string. */
+    int countByName(String name);
+
     /** Returns the total number of occupied inventory slots. */
     int size();
 
@@ -112,4 +115,23 @@ public interface Inventory
      * interactions. No-op if the item is not in inventory.
      */
     void clickItem(int itemId);
+
+    /**
+     * Clicks an explicit inventory action on the first item with the given ID.
+     * Useful for storage items such as a fish barrel or coal bag where left-click
+     * is not the action we need.
+     */
+    void clickItemAction(int itemId, String action);
+
+    /**
+     * Robot-clicks the first inventory item whose name contains the given string.
+     * No-op if no matching item is in inventory.
+     */
+    void clickItemByName(String name);
+
+    /**
+     * Clicks an explicit inventory action on the first item whose name contains
+     * the given string. No-op if no matching item or action is available.
+     */
+    void clickItemActionByName(String name, String action);
 }

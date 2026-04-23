@@ -18,9 +18,12 @@ public class ThievingSettings extends ScriptSettings
     /** When true: drop the stolen items (coins/food) when inventory is full. */
     public final boolean dropJunk;
 
+    /** When true, prefer re-clicking the same nearby NPC instead of nearest search. */
+    public final boolean stickyTarget;
+
     /**
      * Item IDs of food available in inventory, checked in order.
-     * Reserved for future eating-while-stunned support.
+     * Used for eat-while-stunned support.
      */
     public final int[] foodIds;
 
@@ -32,7 +35,8 @@ public class ThievingSettings extends ScriptSettings
     public enum ThievingMethod
     {
         STALL      ("Steal from stall"),
-        PICKPOCKET ("Pickpocket NPC");
+        PICKPOCKET ("Pickpocket NPC"),
+        BLACKJACK  ("Blackjack NPC");
 
         public final String displayName;
         ThievingMethod(String displayName) { this.displayName = displayName; }
@@ -50,21 +54,23 @@ public class ThievingSettings extends ScriptSettings
      */
     public enum StallType
     {
-        BAKERS_STALL ("Baker's stall",  5,  new int[]{1891, 1897, 1885}),
-        TEA_STALL    ("Tea stall",      5,  new int[]{1978}),
-        SILK_STALL   ("Silk Stall",    20,  new int[]{950}),
-        FRUIT_STALL  ("Fruit Stall",   25,  new int[]{1963, 1965, 1967}),
-        GEM_STALL    ("Gem Stall",     75,  new int[]{1623, 1621, 1619});
+        BAKERS_STALL ("Baker's stall",  5,  new int[]{1891, 1897, 1885}, new String[0]),
+        TEA_STALL    ("Tea stall",      5,  new int[]{1978},             new String[0]),
+        SILK_STALL   ("Silk Stall",    20,  new int[]{950},              new String[]{ "Guard" }),
+        FRUIT_STALL  ("Fruit Stall",   25,  new int[]{1963, 1965, 1967}, new String[]{ "Guard" }),
+        GEM_STALL    ("Gem Stall",     75,  new int[]{1623, 1621, 1619}, new String[]{ "Guard" });
 
         public final String stallName;
         public final int    levelRequired;
         public final int[]  stolenItemIds;
+        public final String[] guardNpcNames;
 
-        StallType(String stallName, int levelRequired, int[] stolenItemIds)
+        StallType(String stallName, int levelRequired, int[] stolenItemIds, String[] guardNpcNames)
         {
             this.stallName      = stallName;
             this.levelRequired  = levelRequired;
             this.stolenItemIds  = stolenItemIds;
+            this.guardNpcNames  = guardNpcNames != null ? guardNpcNames : new String[0];
         }
     }
 
@@ -85,7 +91,9 @@ public class ThievingSettings extends ScriptSettings
         ROGUE          ("Rogue",               32,  new int[]{995}),
         MASTER_FARMER  ("Master Farmer",       38,  new int[]{5318, 5319, 5324}),
         GUARD          ("Guard",               40,  new int[]{995}),
-        KNIGHT         ("Knight of Ardougne",  55,  new int[]{995});
+        KNIGHT         ("Knight of Ardougne",  55,  new int[]{995}),
+        BANDIT         ("Bandit",              45,  new int[]{995}),
+        MENAPHITE_THUG ("Menaphite Thug",      65,  new int[]{995});
 
         public final String npcName;
         public final int    levelRequired;
@@ -106,6 +114,7 @@ public class ThievingSettings extends ScriptSettings
         StallType      stallType,
         NpcTarget      npcTarget,
         boolean        dropJunk,
+        boolean        stickyTarget,
         int[]          foodIds,
         int            breakIntervalMinutes,
         int            breakDurationMinutes)
@@ -114,6 +123,7 @@ public class ThievingSettings extends ScriptSettings
         this.stallType            = stallType;
         this.npcTarget            = npcTarget;
         this.dropJunk             = dropJunk;
+        this.stickyTarget         = stickyTarget;
         this.foodIds              = foodIds != null ? foodIds : new int[0];
         this.breakIntervalMinutes = breakIntervalMinutes;
         this.breakDurationMinutes = breakDurationMinutes;
@@ -126,6 +136,7 @@ public class ThievingSettings extends ScriptSettings
             StallType.TEA_STALL,
             NpcTarget.MAN,
             true,
+            false,
             new int[0],
             60,
             5

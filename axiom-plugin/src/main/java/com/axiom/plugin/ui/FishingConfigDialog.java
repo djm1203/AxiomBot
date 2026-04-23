@@ -2,6 +2,7 @@ package com.axiom.plugin.ui;
 
 import com.axiom.scripts.fishing.FishingSettings;
 import com.axiom.scripts.fishing.FishingSettings.BankAction;
+import com.axiom.scripts.fishing.FishingSettings.LocationPreset;
 import com.axiom.scripts.fishing.FishingSettings.SpotType;
 
 import javax.swing.JCheckBox;
@@ -24,8 +25,10 @@ public class FishingConfigDialog extends ScriptConfigDialog<FishingSettings>
 {
     // ── Controls ──────────────────────────────────────────────────────────────
     private JComboBox<String> spotCombo;
+    private JComboBox<String> locationCombo;
     private JComboBox<String> bankCombo;
     private JCheckBox         powerFishBox;
+    private JCheckBox         fishBarrelBox;
     private JSpinner          breakIntervalSpinner;
     private JSpinner          breakDurationSpinner;
 
@@ -56,6 +59,12 @@ public class FishingConfigDialog extends ScriptConfigDialog<FishingSettings>
         root.add(spotSection);
         root.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, AxiomTheme.PAD_SM)));
 
+        AxiomSectionPanel locationSection = new AxiomSectionPanel("LOCATION");
+        locationCombo = makeCombo(locationDisplayNames());
+        locationSection.addRow("Spot preset", locationCombo);
+        root.add(locationSection);
+        root.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, AxiomTheme.PAD_SM)));
+
         // ── Section: Inventory ─────────────────────────────────────────────
         AxiomSectionPanel invSection = new AxiomSectionPanel("WHEN INVENTORY FULL");
 
@@ -64,6 +73,8 @@ public class FishingConfigDialog extends ScriptConfigDialog<FishingSettings>
 
         powerFishBox = makeCheckBox("Power-fish (drop each catch immediately)", false);
         invSection.addCheckRow("", powerFishBox);
+        fishBarrelBox = makeCheckBox("Use fish barrel when present", false);
+        invSection.addCheckRow("", fishBarrelBox);
 
         root.add(invSection);
         root.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, AxiomTheme.PAD_SM)));
@@ -94,7 +105,15 @@ public class FishingConfigDialog extends ScriptConfigDialog<FishingSettings>
         int breakInterval = (Integer) breakIntervalSpinner.getValue();
         int breakDuration = (Integer) breakDurationSpinner.getValue();
 
-        return new FishingSettings(spotType, bankAction, powerFish, breakInterval, breakDuration);
+        return new FishingSettings(
+            spotType,
+            bankAction,
+            locationPresetFromIndex(locationCombo.getSelectedIndex()),
+            powerFish,
+            fishBarrelBox.isSelected(),
+            breakInterval,
+            breakDuration
+        );
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -127,5 +146,19 @@ public class FishingConfigDialog extends ScriptConfigDialog<FishingSettings>
         SpotType[] types = SpotType.values();
         if (idx >= 0 && idx < types.length) return types[idx];
         return SpotType.SHRIMP_ANCHOVIES;
+    }
+
+    private static String[] locationDisplayNames()
+    {
+        LocationPreset[] presets = LocationPreset.values();
+        String[] names = new String[presets.length];
+        for (int i = 0; i < presets.length; i++) names[i] = presets[i].displayName;
+        return names;
+    }
+
+    private static LocationPreset locationPresetFromIndex(int idx)
+    {
+        LocationPreset[] presets = LocationPreset.values();
+        return (idx >= 0 && idx < presets.length) ? presets[idx] : LocationPreset.CUSTOM_START;
     }
 }

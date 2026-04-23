@@ -11,7 +11,7 @@ import java.util.*;
  * Assumptions: no quoted fields containing commas, UTF-8 encoding,
  * first row is the header. Sufficient for launcher's controlled CSV format.
  */
-final class CsvUtil
+public final class CsvUtil
 {
     private CsvUtil() {}
 
@@ -19,7 +19,7 @@ final class CsvUtil
      * Parses a CSV file and returns each data row as a header→value map.
      * Empty lines are skipped. Values are trimmed.
      */
-    static List<Map<String, String>> read(File file) throws IOException
+    public static List<Map<String, String>> read(File file) throws IOException
     {
         List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
         if (lines.isEmpty()) return Collections.emptyList();
@@ -46,7 +46,7 @@ final class CsvUtil
      * Writes a CSV file with the given headers and rows.
      * Existing file is overwritten.
      */
-    static void write(File file, List<String> headers, List<String[]> rows) throws IOException
+    public static void write(File file, List<String> headers, List<String[]> rows) throws IOException
     {
         file.getParentFile().mkdirs();
         try (PrintWriter pw = new PrintWriter(
@@ -66,14 +66,14 @@ final class CsvUtil
     }
 
     /** Returns the value or "" if null/absent. */
-    static String get(Map<String, String> row, String key)
+    public static String get(Map<String, String> row, String key)
     {
         String v = row.get(key);
         return v != null ? v : "";
     }
 
     /** Parses an int from a map value, returning {@code defaultVal} on blank/error. */
-    static int getInt(Map<String, String> row, String key, int defaultVal)
+    public static int getInt(Map<String, String> row, String key, int defaultVal)
     {
         String v = get(row, key);
         if (v.isEmpty()) return defaultVal;

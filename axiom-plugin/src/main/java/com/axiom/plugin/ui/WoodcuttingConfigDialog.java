@@ -3,6 +3,7 @@ package com.axiom.plugin.ui;
 import com.axiom.api.util.Progression;
 import com.axiom.scripts.woodcutting.WoodcuttingSettings;
 import com.axiom.scripts.woodcutting.WoodcuttingSettings.BankAction;
+import com.axiom.scripts.woodcutting.WoodcuttingSettings.LocationPreset;
 import com.axiom.scripts.woodcutting.WoodcuttingSettings.TreeType;
 
 import javax.swing.Box;
@@ -27,10 +28,12 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
 {
     // ── Controls ──────────────────────────────────────────────────────────────
     private JComboBox<String> treeCombo;
+    private JComboBox<String> locationCombo;
     private JCheckBox         autoModeBox;
     private JTextField        progressionField;
     private JComboBox<String> bankCombo;
     private JCheckBox         powerChopBox;
+    private JCheckBox         forestryBox;
     private JSpinner          breakIntervalSpinner;
     private JSpinner          breakDurationSpinner;
 
@@ -79,6 +82,12 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
         root.add(treeSection);
         root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
+        AxiomSectionPanel locationSection = new AxiomSectionPanel("LOCATION");
+        locationCombo = makeCombo(locationDisplayNames());
+        locationSection.addRow("Loop preset", locationCombo);
+        root.add(locationSection);
+        root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
+
         // ── Section: Inventory ─────────────────────────────────────────────
         AxiomSectionPanel invSection = new AxiomSectionPanel("WHEN INVENTORY FULL");
 
@@ -89,6 +98,12 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
         invSection.addCheckRow("", powerChopBox);
 
         root.add(invSection);
+        root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
+
+        AxiomSectionPanel forestrySection = new AxiomSectionPanel("FORESTRY");
+        forestryBox = makeCheckBox("Join nearby Forestry events when idle", false);
+        forestrySection.addCheckRow("", forestryBox);
+        root.add(forestrySection);
         root.add(Box.createRigidArea(new Dimension(0, AxiomTheme.PAD_SM)));
 
         // ── Section: Antiban ──────────────────────────────────────────────
@@ -123,7 +138,8 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
         int breakDuration = (Integer) breakDurationSpinner.getValue();
 
         return new WoodcuttingSettings(
-            treeType, bankAction, powerChop,
+            treeType, bankAction, locationPresetFromIndex(locationCombo.getSelectedIndex()), powerChop,
+            forestryBox.isSelected(),
             autoMode, progressionStr,
             breakInterval, breakDuration);
     }
@@ -148,5 +164,22 @@ public class WoodcuttingConfigDialog extends ScriptConfigDialog<WoodcuttingSetti
         TreeType[] types = TreeType.values();
         if (idx >= 0 && idx < types.length) return types[idx];
         return TreeType.OAK;
+    }
+
+    private static String[] locationDisplayNames()
+    {
+        LocationPreset[] presets = LocationPreset.values();
+        String[] names = new String[presets.length];
+        for (int i = 0; i < presets.length; i++)
+        {
+            names[i] = presets[i].displayName;
+        }
+        return names;
+    }
+
+    private static LocationPreset locationPresetFromIndex(int idx)
+    {
+        LocationPreset[] presets = LocationPreset.values();
+        return (idx >= 0 && idx < presets.length) ? presets[idx] : LocationPreset.CUSTOM_START;
     }
 }

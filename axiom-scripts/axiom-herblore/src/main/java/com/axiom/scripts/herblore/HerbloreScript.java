@@ -8,7 +8,9 @@ import com.axiom.api.script.ScriptCategory;
 import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
 import com.axiom.api.util.Antiban;
+import com.axiom.api.util.InventoryDeltaTracker;
 import com.axiom.api.util.Log;
+import com.axiom.api.util.ProductionTickTracker;
 import com.axiom.api.world.Bank;
 
 /**
@@ -50,16 +52,16 @@ public class HerbloreScript extends BotScript
     private enum State { SELECT_HERB, USE_ON_VIAL, HANDLE_DIALOG, WAITING, BANKING }
     private State state = State.SELECT_HERB;
 
-    // Animation tracking
-    private boolean wasAnimating     = false;
-    private int     noAnimationTicks = 0;
     // 8 ticks gives enough grace for brief pauses between individual herb animations.
     private static final int ANIMATION_TIMEOUT_TICKS = 8;
 
-    // Dialog wait tracking
-    private int     dialogWaitTicks = 0;
     // 6 ticks to wait for make dialog after item-on-item fires.
     private static final int DIALOG_TIMEOUT_TICKS = 6;
+    private final ProductionTickTracker productionTracker = new ProductionTickTracker();
+    private final InventoryDeltaTracker cleaningTracker = new InventoryDeltaTracker();
+    private int batchPrimaryCount = 0;
+    private int batchSecondaryCount = 0;
+    private int cleaningWaitTicks = 0;
 
     // Banking state
     private boolean bankJustOpened   = false;
@@ -85,11 +87,21 @@ public class HerbloreScript extends BotScript
         antiban.setBreakDurationMinutes(settings.breakDurationMinutes);
         antiban.reset();
 
-        log.info("Herblore started: herb={} (id={}) bankForIngredients={}",
-            settings.herbType.herbName, settings.herbType.herbId,
+        log.info("Herblore started: method={} primary={} secondary={} bankForIngredients={}",
+            settings.method.displayName, getPrimaryItemLabel(), getSecondaryItemLabel(),
             settings.bankForIngredients);
 
+        if (settings.method == HerbloreSettings.Method.FINISHED && settings.secondaryItemId <= 0)
+        {
+            log.warn("Finished-potion mode requires a secondary item ID — stopping");
+            stop();
+            return;
+        }
+
         state = State.SELECT_HERB;
+        productionTracker.resetDialog();
+        productionTracker.resetAnimation();
+        cleaningTracker.reset();
     }
 
     @Override
@@ -115,48 +127,67 @@ public class HerbloreScript extends BotScript
 
     private void handleSelectHerb()
     {
-        if (!inventory.contains(settings.herbType.herbId))
+        int primaryItemId = getPrimaryItemId();
+        int secondaryItemId = getSecondaryItemId();
+
+        if (!inventory.contains(primaryItemId))
         {
             if (settings.bankForIngredients)
             {
-                log.info("[SELECT_HERB] No herbs — transitioning to BANKING");
+                log.info("[SELECT_HERB] No {} — transitioning to BANKING", getPrimaryItemLabel());
                 state = State.BANKING;
             }
             else
             {
-                log.info("[SELECT_HERB] No herbs remaining — script complete");
+                log.info("[SELECT_HERB] No {} remaining — script complete", getPrimaryItemLabel());
                 stop();
             }
             return;
         }
 
-        if (!inventory.contains(VIAL_ID))
+        if (settings.method != HerbloreSettings.Method.CLEANING && !inventory.contains(secondaryItemId))
         {
             if (settings.bankForIngredients)
             {
-                log.info("[SELECT_HERB] No vials — transitioning to BANKING");
+                log.info("[SELECT_HERB] No {} — transitioning to BANKING", getSecondaryItemLabel());
                 state = State.BANKING;
             }
             else
             {
-                log.info("[SELECT_HERB] No vials remaining — script complete");
+                log.info("[SELECT_HERB] No {} remaining — script complete", getSecondaryItemLabel());
                 stop();
             }
             return;
         }
 
-        log.info("[SELECT_HERB] Selecting {} (id={})", settings.herbType.herbName, settings.herbType.herbId);
-        inventory.selectItem(settings.herbType.herbId);
+        batchPrimaryCount = inventory.count(primaryItemId);
+        batchSecondaryCount = inventory.count(secondaryItemId);
+
+        if (settings.method == HerbloreSettings.Method.CLEANING)
+        {
+            log.info("[SELECT_HERB] Cleaning {} (id={})", getPrimaryItemLabel(), primaryItemId);
+            cleaningTracker.capture(inventory, settings.herbType.grimyId, settings.herbType.herbId);
+            cleaningWaitTicks = 0;
+            inventory.clickItem(primaryItemId);
+            setTickDelay(1);
+            state = State.WAITING;
+            return;
+        }
+
+        log.info("[SELECT_HERB] Selecting {} (id={})", getPrimaryItemLabel(), primaryItemId);
+        inventory.selectItem(primaryItemId);
         setTickDelay(1);
         state = State.USE_ON_VIAL;
     }
 
     private void handleUseOnVial()
     {
-        log.info("[USE_ON_VIAL] Using {} on vial of water", settings.herbType.herbName);
-        inventory.useSelectedItemOn(VIAL_ID);
+        int secondaryItemId = getSecondaryItemId();
+        log.info("[USE_ON_VIAL] Using {} on {}",
+            getPrimaryItemLabel(), getSecondaryItemLabel());
+        inventory.useSelectedItemOn(secondaryItemId);
 
-        dialogWaitTicks = 0;
+        productionTracker.resetDialog();
         // Give the server 1+ ticks to open the make dialog.
         int reactionTicks = Math.max(antiban.reactionTicks(), 1);
         log.debug("[USE_ON_VIAL] Reaction delay: {} ticks", reactionTicks);
@@ -166,60 +197,79 @@ public class HerbloreScript extends BotScript
 
     private void handleDialog()
     {
-        if (widgets.isMakeDialogOpen())
+        ProductionTickTracker.DialogStatus dialogStatus =
+            productionTracker.observeDialog(widgets.isMakeDialogOpen(), DIALOG_TIMEOUT_TICKS);
+
+        if (dialogStatus == ProductionTickTracker.DialogStatus.OPEN)
         {
             log.info("[HANDLE_DIALOG] Make dialog open — clicking Make All");
             widgets.clickMakeAll();
-            dialogWaitTicks  = 0;
-            wasAnimating     = false;
-            noAnimationTicks = 0;
+            productionTracker.resetDialog();
+            productionTracker.resetAnimation();
             setTickDelay(1);
             state = State.WAITING;
             return;
         }
 
-        dialogWaitTicks++;
-        if (dialogWaitTicks >= DIALOG_TIMEOUT_TICKS)
+        if (dialogStatus == ProductionTickTracker.DialogStatus.TIMED_OUT)
         {
-            log.warn("[HANDLE_DIALOG] Make dialog did not appear after {} ticks — retrying", dialogWaitTicks);
-            dialogWaitTicks = 0;
+            log.warn("[HANDLE_DIALOG] Make dialog did not appear after {} ticks — retrying",
+                productionTracker.getDialogWaitTicks());
+            productionTracker.resetDialog();
             state = State.SELECT_HERB;
         }
         else
         {
-            log.debug("[HANDLE_DIALOG] Waiting for make dialog ({}/{})", dialogWaitTicks, DIALOG_TIMEOUT_TICKS);
+            log.debug("[HANDLE_DIALOG] Waiting for make dialog ({}/{})",
+                productionTracker.getDialogWaitTicks(), DIALOG_TIMEOUT_TICKS);
         }
     }
 
     private void handleWaiting()
     {
-        if (players.isAnimating())
+        if (settings.method == HerbloreSettings.Method.CLEANING)
         {
-            if (!wasAnimating) log.info("[WAITING] Mixing animation started");
-            else               log.debug("[WAITING] Still mixing...");
-            wasAnimating     = true;
-            noAnimationTicks = 0;
+            handleCleaningWait();
             return;
         }
 
-        noAnimationTicks++;
+        ProductionTickTracker.BatchStatus batchStatus =
+            productionTracker.observeAnimation(players.isAnimating(), ANIMATION_TIMEOUT_TICKS);
 
-        if (wasAnimating)
+        if (batchStatus == ProductionTickTracker.BatchStatus.STARTED)
+        {
+            log.info("[WAITING] Mixing animation started");
+            return;
+        }
+
+        if (batchStatus == ProductionTickTracker.BatchStatus.IN_PROGRESS)
+        {
+            log.debug("[WAITING] Still mixing...");
+            return;
+        }
+
+        if (batchStatus == ProductionTickTracker.BatchStatus.COMPLETED)
         {
             log.info("[WAITING] Batch complete — checking inventory");
-            wasAnimating = false;
             state        = State.SELECT_HERB;
         }
-        else if (noAnimationTicks >= ANIMATION_TIMEOUT_TICKS)
+        else if (batchStatus == ProductionTickTracker.BatchStatus.TIMEOUT)
         {
-            log.info("[WAITING] Animation timeout — retrying from SELECT_HERB");
-            wasAnimating     = false;
-            noAnimationTicks = 0;
+            if (madeBatchProgress())
+            {
+                log.info("[WAITING] Animation timed out after progress — resuming from SELECT_HERB");
+            }
+            else
+            {
+                log.info("[WAITING] Animation timeout with no progress — retrying from SELECT_HERB");
+            }
+            productionTracker.resetAnimation();
             state            = State.SELECT_HERB;
         }
         else
         {
-            log.debug("[WAITING] Waiting for animation ({}/{})", noAnimationTicks, ANIMATION_TIMEOUT_TICKS);
+            log.debug("[WAITING] Waiting for animation ({}/{})",
+                productionTracker.getNoAnimationTicks(), ANIMATION_TIMEOUT_TICKS);
         }
     }
 
@@ -274,35 +324,37 @@ public class HerbloreScript extends BotScript
 
         if (!bankHerbDone)
         {
-            if (!bank.contains(settings.herbType.herbId))
+            int primaryItemId = getPrimaryItemId();
+            if (!bank.contains(primaryItemId))
             {
-                log.info("[BANKING] No {} in bank — stopping", settings.herbType.herbName);
+                log.info("[BANKING] No {} in bank — stopping", getPrimaryItemLabel());
                 bank.close();
                 resetBankState();
                 stop();
                 return;
             }
 
-            log.info("[BANKING] Withdrawing all {}", settings.herbType.herbName);
-            bank.withdrawAll(settings.herbType.herbId);
+            log.info("[BANKING] Withdrawing all {}", getPrimaryItemLabel());
+            bank.withdrawAll(primaryItemId);
             bankHerbDone = true;
             setTickDelay(2);
             return;
         }
 
-        if (!bankVialDone)
+        if (settings.method != HerbloreSettings.Method.CLEANING && !bankVialDone)
         {
-            if (!bank.contains(VIAL_ID))
+            int secondaryItemId = getSecondaryItemId();
+            if (!bank.contains(secondaryItemId))
             {
-                log.info("[BANKING] No vials of water in bank — stopping");
+                log.info("[BANKING] No {} in bank — stopping", getSecondaryItemLabel());
                 bank.close();
                 resetBankState();
                 stop();
                 return;
             }
 
-            log.info("[BANKING] Withdrawing all vials of water");
-            bank.withdrawAll(VIAL_ID);
+            log.info("[BANKING] Withdrawing all {}", getSecondaryItemLabel());
+            bank.withdrawAll(secondaryItemId);
             bankVialDone = true;
             setTickDelay(2);
             return;
@@ -321,5 +373,78 @@ public class HerbloreScript extends BotScript
         bankDepositDone = false;
         bankHerbDone    = false;
         bankVialDone    = false;
+    }
+
+    private int getPrimaryItemId()
+    {
+        if (settings.method == HerbloreSettings.Method.CLEANING)
+        {
+            return settings.herbType.grimyId;
+        }
+        return settings.method == HerbloreSettings.Method.UNFINISHED
+            ? settings.herbType.herbId
+            : settings.herbType.unfPotionId;
+    }
+
+    private int getSecondaryItemId()
+    {
+        return settings.method == HerbloreSettings.Method.UNFINISHED
+            ? VIAL_ID
+            : settings.secondaryItemId;
+    }
+
+    private String getPrimaryItemLabel()
+    {
+        if (settings.method == HerbloreSettings.Method.CLEANING)
+        {
+            return settings.herbType.grimyName;
+        }
+        return settings.method == HerbloreSettings.Method.UNFINISHED
+            ? settings.herbType.herbName
+            : settings.herbType.potionName;
+    }
+
+    private String getSecondaryItemLabel()
+    {
+        if (settings.method == HerbloreSettings.Method.CLEANING)
+        {
+            return "clean herb";
+        }
+        if (settings.method == HerbloreSettings.Method.UNFINISHED)
+        {
+            return "vial of water";
+        }
+        return settings.secondaryItemName.isEmpty()
+            ? "secondary item " + settings.secondaryItemId
+            : settings.secondaryItemName;
+    }
+
+    private boolean madeBatchProgress()
+    {
+        return inventory.count(getPrimaryItemId()) < batchPrimaryCount
+            || inventory.count(getSecondaryItemId()) < batchSecondaryCount;
+    }
+
+    private void handleCleaningWait()
+    {
+        if (cleaningTracker.hasAnyChange(inventory))
+        {
+            log.info("[WAITING] Herb cleaned — continuing");
+            cleaningTracker.reset();
+            state = State.SELECT_HERB;
+            return;
+        }
+
+        cleaningWaitTicks++;
+        if (cleaningWaitTicks >= 4)
+        {
+            log.info("[WAITING] Cleaning produced no inventory delta — retrying");
+            cleaningTracker.reset();
+            state = State.SELECT_HERB;
+            cleaningWaitTicks = 0;
+            return;
+        }
+
+        log.debug("[WAITING] Waiting for cleaning delta ({}/4)", cleaningWaitTicks);
     }
 }

@@ -13,7 +13,8 @@ public class CraftingSettings extends ScriptSettings
     public enum CraftingMethod
     {
         GEM_CUTTING("Chisel on gems"),
-        LEATHER    ("Needle on leather");
+        LEATHER    ("Needle on leather"),
+        GLASSBLOWING("Glassblowing");
 
         public final String displayName;
 
@@ -88,9 +89,34 @@ public class CraftingSettings extends ScriptSettings
         }
     }
 
+    /** Molten glass products using a glassblowing pipe. */
+    public enum GlassType
+    {
+        BEER_GLASS   ("Beer glass",     1),
+        CANDLE_LANTERN("Candle lantern", 4),
+        OIL_LAMP     ("Oil lamp",       12),
+        VIAL         ("Vial",           33),
+        UNPOWERED_ORB("Unpowered orb",  46),
+        LANTERN_LENS ("Lantern lens",   49),
+        LIGHT_ORB    ("Light orb",      87);
+
+        public static final int GLASSBLOWING_PIPE_ID = 1785;
+        public static final int MOLTEN_GLASS_ID = 1775;
+
+        public final String productName;
+        public final int levelRequired;
+
+        GlassType(String productName, int levelRequired)
+        {
+            this.productName = productName;
+            this.levelRequired = levelRequired;
+        }
+    }
+
     public final CraftingMethod method;
     public final GemType        gemType;
     public final LeatherType    leatherType;
+    public final GlassType      glassType;
 
     /** True = walk to bank for more materials when inventory runs out. */
     public final boolean bankForMaterials;
@@ -102,6 +128,7 @@ public class CraftingSettings extends ScriptSettings
         CraftingMethod method,
         GemType        gemType,
         LeatherType    leatherType,
+        GlassType      glassType,
         boolean        bankForMaterials,
         int            breakIntervalMinutes,
         int            breakDurationMinutes)
@@ -109,6 +136,7 @@ public class CraftingSettings extends ScriptSettings
         this.method               = method;
         this.gemType              = gemType;
         this.leatherType          = leatherType;
+        this.glassType            = glassType != null ? glassType : GlassType.VIAL;
         this.bankForMaterials     = bankForMaterials;
         this.breakIntervalMinutes = breakIntervalMinutes;
         this.breakDurationMinutes = breakDurationMinutes;
@@ -120,6 +148,7 @@ public class CraftingSettings extends ScriptSettings
             CraftingMethod.GEM_CUTTING,
             GemType.SAPPHIRE,
             LeatherType.LEATHER_GLOVES,
+            GlassType.VIAL,
             false, 60, 5
         );
     }

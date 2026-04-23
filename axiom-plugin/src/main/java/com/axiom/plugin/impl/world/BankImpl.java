@@ -1,8 +1,12 @@
 package com.axiom.plugin.impl.world;
 
 import com.axiom.api.game.SceneObject;
+import com.axiom.api.util.Pathfinder;
 import com.axiom.api.util.Antiban;
 import com.axiom.api.world.Bank;
+import com.axiom.api.world.LocationProfile;
+import com.axiom.api.world.WorldTile;
+import com.axiom.plugin.impl.PathfinderImpl;
 import com.axiom.plugin.impl.game.GameObjectsImpl;
 import com.axiom.plugin.impl.game.NpcsImpl;
 import com.axiom.plugin.impl.game.PlayersImpl;
@@ -35,13 +39,15 @@ public class BankImpl implements Bank
     private final Antiban         antiban;
     private final PlayersImpl     players;
     private final CameraImpl      camera;
+    private final PathfinderImpl  pathfinder;
 
     /** Wall-clock timestamp of the last path-click sent while the player was en route. */
     private long lastWalkClickMs = 0L;
 
     @Inject
     public BankImpl(Client client, GameObjectsImpl gameObjects, NpcsImpl npcs,
-                    Antiban antiban, PlayersImpl players, CameraImpl camera)
+                    Antiban antiban, PlayersImpl players, CameraImpl camera,
+                    PathfinderImpl pathfinder)
     {
         this.client      = client;
         this.gameObjects = gameObjects;
@@ -49,6 +55,7 @@ public class BankImpl implements Bank
         this.antiban     = antiban;
         this.players     = players;
         this.camera      = camera;
+        this.pathfinder  = pathfinder;
     }
 
     @Override
@@ -84,23 +91,58 @@ public class BankImpl implements Bank
     @Override
     public boolean openNearest()
     {
+        return openNearest(null);
+    }
+
+    @Override
+    public boolean openNearest(LocationProfile locationProfile)
+    {
         // Prefer a bank booth/chest; fall back to a Banker NPC.
-        SceneObject target = findNearestBankObject();
-        if (target == null) target = npcs.nearestByName("Banker");
-        if (target == null) return false;
+        SceneObject target = findNearestBankTarget(locationProfile);
+        if (target == null)
+        {
+            if (locationProfile != null && locationProfile.hasBankAnchor())
+            {
+                WorldTile bankAnchor = locationProfile.getBankAnchor();
+                if (players.distanceTo(bankAnchor.getWorldX(), bankAnchor.getWorldY()) > 2)
+                {
+                    pathfinder.walkTo(bankAnchor.getWorldX(), bankAnchor.getWorldY(), bankAnchor.getPlane());
+                }
+            }
+            return false;
+        }
+
+        if (locationProfile != null && locationProfile.hasBankAnchor())
+        {
+            WorldTile bankAnchor = locationProfile.getBankAnchor();
+            if (bankAnchor != null
+                && bankAnchor.getPlane() == client.getPlane()
+                && players.distanceTo(bankAnchor.getWorldX(), bankAnchor.getWorldY()) > 4
+                && players.distanceTo(target.getWorldX(), target.getWorldY()) > 3)
+            {
+                log.info("[BANK] Approaching bank anchor at ({},{},{}) before banking",
+                    bankAnchor.getWorldX(), bankAnchor.getWorldY(), bankAnchor.getPlane());
+                pathfinder.walkTo(bankAnchor.getWorldX(), bankAnchor.getWorldY(), bankAnchor.getPlane());
+                return false;
+            }
+        }
 
         int distance = players.distanceTo(target.getWorldX(), target.getWorldY());
 
         if (distance > 3 || players.isMoving())
         {
-            // Fire at most one path-click per WALK_CLICK_COOLDOWN_MS.
-            // This initiates (or recovers) pathfinding without spamming interact()
-            // every 3 ticks, which would cancel-and-restart the walk queue each time.
+            Pathfinder.ProgressState progressState =
+                pathfinder.getProgressTo(target.getWorldX(), target.getWorldY(), target.getPlane());
+
+            // Send a bounded pathing step toward the bank rather than repeatedly
+            // clicking the booth itself while still walking. This keeps the walk
+            // queue more stable and lets PathfinderImpl handle blocked target tiles.
             long now = System.currentTimeMillis();
-            if (now - lastWalkClickMs >= WALK_CLICK_COOLDOWN_MS)
+            if (progressState == Pathfinder.ProgressState.STUCK || now - lastWalkClickMs >= WALK_CLICK_COOLDOWN_MS)
             {
-                log.info("[BANK] Walking to bank (distance={}) — sending path click", distance);
-                target.interact("Bank");
+                log.info("[BANK] Walking to bank (distance={} progress={}) — sending pathfinder step",
+                    distance, progressState);
+                pathfinder.walkTo(target.getWorldX(), target.getWorldY(), client.getPlane());
                 lastWalkClickMs = now;
             }
             return false;
@@ -113,7 +155,7 @@ public class BankImpl implements Bank
         try { Thread.sleep(300); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
 
         log.info("[BANK] Camera aligned — clicking to open bank");
-        target.interact("Bank");
+        target.interact(resolveBankAction(target, locationProfile));
         lastWalkClickMs = 0L;
         return true;
     }
@@ -246,6 +288,122 @@ public class BankImpl implements Bank
     {
         // hasAction() uses the impostor-corrected actions cached in SceneObjectWrapper
         return gameObjects.nearest(o -> o.hasAction("Bank"));
+    }
+
+    private SceneObject findNearestBankTarget(LocationProfile locationProfile)
+    {
+        if (locationProfile != null)
+        {
+            SceneObject preferredObject = findPreferredBankObject(locationProfile);
+            if (preferredObject != null)
+            {
+                return preferredObject;
+            }
+
+            SceneObject preferredNpc = findPreferredBankNpc(locationProfile);
+            if (preferredNpc != null)
+            {
+                return preferredNpc;
+            }
+        }
+
+        SceneObject target = findNearestBankObject();
+        if (target != null)
+        {
+            return target;
+        }
+
+        return npcs.nearestByName("Banker");
+    }
+
+    private SceneObject findPreferredBankObject(LocationProfile locationProfile)
+    {
+        String[] preferredNames = locationProfile.getBankObjectNames();
+        String[] preferredActions = locationProfile.getBankActions();
+        if (preferredNames.length == 0 && preferredActions.length == 0)
+        {
+            return null;
+        }
+
+        return gameObjects.nearest(o ->
+            matchesAnyName(o.getName(), preferredNames)
+                && matchesAnyAction(o, preferredActions));
+    }
+
+    private SceneObject findPreferredBankNpc(LocationProfile locationProfile)
+    {
+        String[] preferredNames = locationProfile.getBankNpcNames();
+        if (preferredNames.length == 0)
+        {
+            return null;
+        }
+
+        return npcs.nearest(o -> matchesAnyName(o.getName(), preferredNames));
+    }
+
+    private String resolveBankAction(SceneObject target, LocationProfile locationProfile)
+    {
+        if (locationProfile != null)
+        {
+            for (String action : locationProfile.getBankActions())
+            {
+                if (action != null && !action.isBlank() && target.hasAction(action))
+                {
+                    return action;
+                }
+            }
+        }
+        String fallbackAction = target.hasAction("Bank") ? "Bank" : firstAvailableAction(target);
+        return locationProfile != null
+            ? locationProfile.resolveInteractionAction("bank", fallbackAction)
+            : fallbackAction;
+    }
+
+    private static String firstAvailableAction(SceneObject target)
+    {
+        for (String action : target.getActions())
+        {
+            if (action != null && !action.isBlank())
+            {
+                return action;
+            }
+        }
+        return "Bank";
+    }
+
+    private static boolean matchesAnyName(String name, String[] preferredNames)
+    {
+        if (preferredNames == null || preferredNames.length == 0)
+        {
+            return true;
+        }
+
+        for (String preferredName : preferredNames)
+        {
+            if (preferredName != null && !preferredName.isBlank()
+                && name != null && name.equalsIgnoreCase(preferredName))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean matchesAnyAction(SceneObject target, String[] preferredActions)
+    {
+        if (preferredActions == null || preferredActions.length == 0)
+        {
+            return target.hasAction("Bank");
+        }
+
+        for (String action : preferredActions)
+        {
+            if (action != null && !action.isBlank() && target.hasAction(action))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isProtected(int itemId, int[] protectedIds)

@@ -40,14 +40,42 @@ public class WoodcuttingSettings extends ScriptSettings
         }
     }
 
+    public enum LocationPreset
+    {
+        CUSTOM_START     ("Custom / Start Tile", 10, new String[0], new String[]{ "Banker" }, new String[]{ "Bank" }),
+        DRAYNOR_WILLOWS  ("Draynor Willows",      9, new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        VARROCK_WEST_OAKS("Varrock West Oaks",    9, new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        SEERS_MAPLES     ("Seers Maples",        11, new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        WOODCUTTING_GUILD_YEWS("Woodcutting Guild Yews", 11, new String[]{ "Bank chest" }, new String[]{ "Banker" }, new String[]{ "Use", "Bank" });
+
+        public final String displayName;
+        public final int workAreaRadius;
+        public final String[] bankObjectNames;
+        public final String[] bankNpcNames;
+        public final String[] bankActions;
+
+        LocationPreset(String displayName, int workAreaRadius, String[] bankObjectNames, String[] bankNpcNames, String[] bankActions)
+        {
+            this.displayName = displayName;
+            this.workAreaRadius = workAreaRadius;
+            this.bankObjectNames = bankObjectNames;
+            this.bankNpcNames = bankNpcNames;
+            this.bankActions = bankActions;
+        }
+    }
+
     /** The action to take when the inventory is full. */
     public enum BankAction { DROP_LOGS, BANK }
 
     final TreeType   treeType;
     final BankAction bankAction;
+    final LocationPreset locationPreset;
 
     /** Whether to use power-chopping (drop logs immediately). */
     final boolean powerChop;
+
+    /** Whether to opportunistically participate in nearby Forestry events. */
+    final boolean forestryEnabled;
 
     /**
      * When true, {@code treeType} is ignored and the Progression string is
@@ -71,7 +99,9 @@ public class WoodcuttingSettings extends ScriptSettings
     public WoodcuttingSettings(
         TreeType treeType,
         BankAction bankAction,
+        LocationPreset locationPreset,
         boolean powerChop,
+        boolean forestryEnabled,
         boolean autoMode,
         String progressionString,
         int breakIntervalMinutes,
@@ -79,7 +109,9 @@ public class WoodcuttingSettings extends ScriptSettings
     {
         this.treeType             = treeType;
         this.bankAction           = bankAction;
+        this.locationPreset       = locationPreset != null ? locationPreset : LocationPreset.CUSTOM_START;
         this.powerChop            = powerChop;
+        this.forestryEnabled      = forestryEnabled;
         this.autoMode             = autoMode;
         this.progressionString    = progressionString;
         this.breakIntervalMinutes = breakIntervalMinutes;
@@ -90,7 +122,8 @@ public class WoodcuttingSettings extends ScriptSettings
     public static WoodcuttingSettings defaults()
     {
         return new WoodcuttingSettings(
-            TreeType.OAK, BankAction.DROP_LOGS, true,
+            TreeType.OAK, BankAction.DROP_LOGS, LocationPreset.CUSTOM_START, true,
+            false,
             false, Progression.DEFAULT_WOODCUTTING,
             60, 5);
     }

@@ -14,19 +14,21 @@ public class AlchemySettings extends ScriptSettings
     /** Alchemy spell variant with its widget location and level requirement. */
     public enum AlchemySpell
     {
-        HIGH_ALCHEMY(55, "High Level Alchemy", 218, 29),
-        LOW_ALCHEMY (21, "Low Level Alchemy",  218, 25);
+        HIGH_ALCHEMY(55, 5, "High Level Alchemy", 218, 29),
+        LOW_ALCHEMY (21, 3, "Low Level Alchemy",  218, 25);
 
         public final int    levelRequired;
+        public final int    fireRuneCost;
         public final String displayName;
         /** Spellbook widget group ID. */
         public final int    widgetGroup;
         /** Spellbook widget child ID for this spell. */
         public final int    widgetChild;
 
-        AlchemySpell(int levelRequired, String displayName, int widgetGroup, int widgetChild)
+        AlchemySpell(int levelRequired, int fireRuneCost, String displayName, int widgetGroup, int widgetChild)
         {
             this.levelRequired = levelRequired;
+            this.fireRuneCost  = fireRuneCost;
             this.displayName   = displayName;
             this.widgetGroup   = widgetGroup;
             this.widgetChild   = widgetChild;

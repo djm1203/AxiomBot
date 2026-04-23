@@ -173,6 +173,51 @@ public class SceneObjectWrapper implements SceneObject
         }
     }
 
+    @Override
+    public void useSelected()
+    {
+        if (npc != null)
+        {
+            if (!moveMouseTo(npc.getLocalLocation())) return;
+            client.menuAction(
+                0, 0,
+                MenuAction.WIDGET_TARGET_ON_NPC,
+                npc.getIndex(), 0,
+                "", name
+            );
+            return;
+        }
+
+        if (tileObject == null)
+        {
+            return;
+        }
+
+        int sceneX;
+        int sceneY;
+        if (tileObject instanceof GameObject)
+        {
+            net.runelite.api.Point min = ((GameObject) tileObject).getSceneMinLocation();
+            sceneX = min.getX();
+            sceneY = min.getY();
+        }
+        else
+        {
+            LocalPoint lp = tileObject.getLocalLocation();
+            sceneX = lp.getSceneX();
+            sceneY = lp.getSceneY();
+        }
+
+        if (!moveMouseTo(tileObject.getLocalLocation())) return;
+
+        client.menuAction(
+            sceneX, sceneY,
+            MenuAction.WIDGET_TARGET_ON_GAME_OBJECT,
+            tileObject.getId(), 0,
+            "", name
+        );
+    }
+
     /**
      * Moves the system mouse cursor to the canvas position of the given local point.
      * RuneLite's OSRS client validates that the cursor is plausible near the target

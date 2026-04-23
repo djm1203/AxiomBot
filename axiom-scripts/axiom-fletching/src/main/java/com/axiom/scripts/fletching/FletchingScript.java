@@ -8,7 +8,9 @@ import com.axiom.api.script.ScriptCategory;
 import com.axiom.api.script.ScriptManifest;
 import com.axiom.api.script.ScriptSettings;
 import com.axiom.api.util.Antiban;
+import com.axiom.api.util.InventoryDeltaTracker;
 import com.axiom.api.util.Log;
+import com.axiom.api.util.ProductionTickTracker;
 import com.axiom.api.world.Bank;
 import com.axiom.scripts.fletching.FletchingSettings.BowType;
 import com.axiom.scripts.fletching.FletchingSettings.DartType;
@@ -62,17 +64,16 @@ public class FletchingScript extends BotScript
     private FletchingSettings settings;
 
     // ── State machine ─────────────────────────────────────────────────────────
-    private enum State { SELECT_ITEM, USE_ON_TARGET, HANDLE_DIALOG, WAITING, BANKING }
+    private enum State { SELECT_ITEM, USE_ON_TARGET, HANDLE_DIALOG, WAITING, FAST_WAITING, BANKING }
     private State state = State.SELECT_ITEM;
 
     // Animation tracking (KNIFE_LOGS / STRING_BOW only)
-    private boolean wasAnimating     = false;
-    private int     noAnimationTicks = 0;
     private static final int ANIMATION_TIMEOUT_TICKS = 8;
-
-    // Dialog wait tracking
-    private int dialogWaitTicks = 0;
     private static final int DIALOG_TIMEOUT_TICKS = 6;
+    private static final int FAST_TIMEOUT_TICKS = 4;
+    private final ProductionTickTracker productionTracker = new ProductionTickTracker();
+    private final InventoryDeltaTracker fastDeltaTracker = new InventoryDeltaTracker();
+    private int fastWaitTicks;
 
     // Banking state
     private boolean bankJustOpened  = false;
@@ -102,6 +103,9 @@ public class FletchingScript extends BotScript
             settings.method.displayName, settings.bankForMaterials);
 
         state = State.SELECT_ITEM;
+        productionTracker.resetDialog();
+        productionTracker.resetAnimation();
+        fastDeltaTracker.reset();
     }
 
     @Override
@@ -113,6 +117,7 @@ public class FletchingScript extends BotScript
             case USE_ON_TARGET: handleUseOnTarget(); break;
             case HANDLE_DIALOG: handleDialog();      break;
             case WAITING:       handleWaiting();     break;
+            case FAST_WAITING:  handleFastWaiting(); break;
             case BANKING:       handleBanking();     break;
         }
     }
@@ -129,9 +134,11 @@ public class FletchingScript extends BotScript
     {
         switch (settings.method)
         {
-            case KNIFE_LOGS: handleSelectKnifeLogs(); break;
-            case STRING_BOW: handleSelectStringBow(); break;
-            case DARTS:      handleSelectDartTip();   break;
+            case KNIFE_LOGS:      handleSelectKnifeLogs();     break;
+            case STRING_BOW:      handleSelectStringBow();     break;
+            case DARTS:           handleSelectDartTip();       break;
+            case ARROW_SHAFTS:    handleSelectArrowShafts();   break;
+            case HEADLESS_ARROWS: handleSelectHeadlessArrows(); break;
         }
     }
 
@@ -208,29 +215,75 @@ public class FletchingScript extends BotScript
         state = State.USE_ON_TARGET;
     }
 
+    private void handleSelectArrowShafts()
+    {
+        if (!inventory.contains(LogType.KNIFE_ID))
+        {
+            if (settings.bankForMaterials) { state = State.BANKING; return; }
+            log.info("[SELECT_ITEM] No knife — script complete");
+            stop();
+            return;
+        }
+        if (!inventory.contains(LogType.NORMAL.logId))
+        {
+            if (settings.bankForMaterials) { state = State.BANKING; return; }
+            log.info("[SELECT_ITEM] No {} — script complete", LogType.NORMAL.logName);
+            stop();
+            return;
+        }
+        log.info("[SELECT_ITEM] Selecting knife for arrow shafts");
+        inventory.selectItem(LogType.KNIFE_ID);
+        setTickDelay(1);
+        state = State.USE_ON_TARGET;
+    }
+
+    private void handleSelectHeadlessArrows()
+    {
+        if (!inventory.contains(FletchingSettings.ARROW_SHAFT_ID))
+        {
+            if (settings.bankForMaterials) { state = State.BANKING; return; }
+            log.info("[SELECT_ITEM] No arrow shafts — script complete");
+            stop();
+            return;
+        }
+        if (!inventory.contains(DartType.FEATHER_ID))
+        {
+            if (settings.bankForMaterials) { state = State.BANKING; return; }
+            log.info("[SELECT_ITEM] No feathers — script complete");
+            stop();
+            return;
+        }
+        log.info("[SELECT_ITEM] Selecting arrow shafts");
+        inventory.selectItem(FletchingSettings.ARROW_SHAFT_ID);
+        setTickDelay(1);
+        state = State.USE_ON_TARGET;
+    }
+
     private void handleUseOnTarget()
     {
         int targetId;
         switch (settings.method)
         {
-            case KNIFE_LOGS: targetId = settings.logType.logId;    break;
-            case STRING_BOW: targetId = settings.bowType.stringId; break;
-            case DARTS:      targetId = DartType.FEATHER_ID;       break;
+            case KNIFE_LOGS:      targetId = settings.logType.logId;    break;
+            case STRING_BOW:      targetId = settings.bowType.stringId; break;
+            case DARTS:           targetId = DartType.FEATHER_ID;       break;
+            case ARROW_SHAFTS:    targetId = LogType.NORMAL.logId;      break;
+            case HEADLESS_ARROWS: targetId = DartType.FEATHER_ID;       break;
             default: return;
         }
 
         log.info("[USE_ON_TARGET] Using selected item on id={}", targetId);
         inventory.useSelectedItemOn(targetId);
 
-        if (settings.method == FletchingMethod.DARTS)
+        if (usesFastCompletionModel())
         {
-            // Darts combine instantly — no make-all dialog. Loop straight back.
+            captureFastCounts();
             setTickDelay(1);
-            state = State.SELECT_ITEM;
+            state = State.FAST_WAITING;
         }
         else
         {
-            dialogWaitTicks = 0;
+            productionTracker.resetDialog();
             int reactionTicks = Math.max(antiban.reactionTicks(), 1);
             log.debug("[USE_ON_TARGET] Reaction delay: {} ticks", reactionTicks);
             setTickDelay(reactionTicks);
@@ -240,61 +293,108 @@ public class FletchingScript extends BotScript
 
     private void handleDialog()
     {
-        if (widgets.isMakeDialogOpen())
+        ProductionTickTracker.DialogStatus dialogStatus =
+            productionTracker.observeDialog(widgets.isMakeDialogOpen(), DIALOG_TIMEOUT_TICKS);
+
+        if (dialogStatus == ProductionTickTracker.DialogStatus.OPEN)
         {
-            log.info("[HANDLE_DIALOG] Make dialog open — clicking Make All");
-            widgets.clickMakeAll();
-            dialogWaitTicks  = 0;
-            wasAnimating     = false;
-            noAnimationTicks = 0;
+            if (settings.method == FletchingMethod.KNIFE_LOGS || settings.method == FletchingMethod.ARROW_SHAFTS)
+            {
+                String productName = settings.method == FletchingMethod.ARROW_SHAFTS
+                    ? "Arrow shaft"
+                    : settings.knifeProduct.getProductName(settings.logType);
+                log.info("[HANDLE_DIALOG] Make dialog open — selecting '{}'", productName);
+                if (!widgets.clickMakeOption(productName))
+                {
+                    log.warn("[HANDLE_DIALOG] Could not find knife product '{}' in make dialog — retrying",
+                        productName);
+                    productionTracker.resetDialog();
+                    state = State.SELECT_ITEM;
+                    return;
+                }
+            }
+            else
+            {
+                log.info("[HANDLE_DIALOG] Make dialog open — clicking Make All");
+                widgets.clickMakeAll();
+            }
+            productionTracker.resetDialog();
+            productionTracker.resetAnimation();
             setTickDelay(1);
             state = State.WAITING;
             return;
         }
 
-        dialogWaitTicks++;
-        if (dialogWaitTicks >= DIALOG_TIMEOUT_TICKS)
+        if (dialogStatus == ProductionTickTracker.DialogStatus.TIMED_OUT)
         {
-            log.warn("[HANDLE_DIALOG] Make dialog did not appear after {} ticks — retrying", dialogWaitTicks);
-            dialogWaitTicks = 0;
+            log.warn("[HANDLE_DIALOG] Make dialog did not appear after {} ticks — retrying",
+                productionTracker.getDialogWaitTicks());
+            productionTracker.resetDialog();
             state = State.SELECT_ITEM;
         }
         else
         {
-            log.debug("[HANDLE_DIALOG] Waiting for make dialog ({}/{})", dialogWaitTicks, DIALOG_TIMEOUT_TICKS);
+            log.debug("[HANDLE_DIALOG] Waiting for make dialog ({}/{})",
+                productionTracker.getDialogWaitTicks(), DIALOG_TIMEOUT_TICKS);
         }
     }
 
     private void handleWaiting()
     {
-        if (players.isAnimating())
+        ProductionTickTracker.BatchStatus batchStatus =
+            productionTracker.observeAnimation(players.isAnimating(), ANIMATION_TIMEOUT_TICKS);
+
+        if (batchStatus == ProductionTickTracker.BatchStatus.STARTED)
         {
-            if (!wasAnimating) log.info("[WAITING] Fletching animation started");
-            else               log.debug("[WAITING] Still fletching...");
-            wasAnimating     = true;
-            noAnimationTicks = 0;
+            log.info("[WAITING] Fletching animation started");
             return;
         }
 
-        noAnimationTicks++;
+        if (batchStatus == ProductionTickTracker.BatchStatus.IN_PROGRESS)
+        {
+            log.debug("[WAITING] Still fletching...");
+            return;
+        }
 
-        if (wasAnimating)
+        if (batchStatus == ProductionTickTracker.BatchStatus.COMPLETED)
         {
             log.info("[WAITING] Batch complete — checking inventory");
-            wasAnimating = false;
             state        = State.SELECT_ITEM;
         }
-        else if (noAnimationTicks >= ANIMATION_TIMEOUT_TICKS)
+        else if (batchStatus == ProductionTickTracker.BatchStatus.TIMEOUT)
         {
             log.info("[WAITING] Animation timeout — retrying from SELECT_ITEM");
-            wasAnimating     = false;
-            noAnimationTicks = 0;
+            productionTracker.resetAnimation();
             state            = State.SELECT_ITEM;
         }
         else
         {
-            log.debug("[WAITING] Waiting for animation ({}/{})", noAnimationTicks, ANIMATION_TIMEOUT_TICKS);
+            log.debug("[WAITING] Waiting for animation ({}/{})",
+                productionTracker.getNoAnimationTicks(), ANIMATION_TIMEOUT_TICKS);
         }
+    }
+
+    private void handleFastWaiting()
+    {
+        if (hasFastProgress())
+        {
+            log.info("[FAST_WAITING] Fast fletching progress detected");
+            resetFastTracking();
+            state = State.SELECT_ITEM;
+            return;
+        }
+
+        fastWaitTicks++;
+        if (fastWaitTicks >= FAST_TIMEOUT_TICKS)
+        {
+            log.warn("[FAST_WAITING] No inventory delta after {} ticks — retrying", fastWaitTicks);
+            resetFastTracking();
+            state = State.SELECT_ITEM;
+            return;
+        }
+
+        log.debug("[FAST_WAITING] Waiting for fast production delta ({}/{})",
+            fastWaitTicks, FAST_TIMEOUT_TICKS);
     }
 
     private void handleBanking()
@@ -363,6 +463,13 @@ public class FletchingScript extends BotScript
         if (!bankItem1Done)
         {
             int item1Id = getItem1Id();
+            if (inventory.contains(item1Id))
+            {
+                log.info("[BANKING] Item1 (id={}) already in inventory — skipping withdraw", item1Id);
+                bankItem1Done = true;
+                setTickDelay(1);
+                return;
+            }
             if (!bank.contains(item1Id))
             {
                 log.info("[BANKING] Item1 (id={}) not in bank — stopping", item1Id);
@@ -410,10 +517,17 @@ public class FletchingScript extends BotScript
     {
         switch (settings.method)
         {
-            case KNIFE_LOGS: return LogType.KNIFE_ID;
-            case STRING_BOW: return settings.bowType.bowId;
-            case DARTS:      return settings.dartType.tipId;
-            default:         return -1;
+            case KNIFE_LOGS:
+            case ARROW_SHAFTS:
+                return LogType.KNIFE_ID;
+            case STRING_BOW:
+                return settings.bowType.bowId;
+            case DARTS:
+                return settings.dartType.tipId;
+            case HEADLESS_ARROWS:
+                return FletchingSettings.ARROW_SHAFT_ID;
+            default:
+                return -1;
         }
     }
 
@@ -421,10 +535,17 @@ public class FletchingScript extends BotScript
     {
         switch (settings.method)
         {
-            case KNIFE_LOGS: return settings.logType.logId;
-            case STRING_BOW: return settings.bowType.stringId;
-            case DARTS:      return DartType.FEATHER_ID;
-            default:         return -1;
+            case KNIFE_LOGS:
+                return settings.logType.logId;
+            case STRING_BOW:
+                return settings.bowType.stringId;
+            case DARTS:
+            case HEADLESS_ARROWS:
+                return DartType.FEATHER_ID;
+            case ARROW_SHAFTS:
+                return LogType.NORMAL.logId;
+            default:
+                return -1;
         }
     }
 
@@ -434,5 +555,42 @@ public class FletchingScript extends BotScript
         bankDepositDone = false;
         bankItem1Done   = false;
         bankItem2Done   = false;
+    }
+
+    private boolean usesFastCompletionModel()
+    {
+        return settings.method == FletchingMethod.DARTS
+            || settings.method == FletchingMethod.HEADLESS_ARROWS;
+    }
+
+    private void captureFastCounts()
+    {
+        fastWaitTicks = 0;
+        fastDeltaTracker.capture(inventory, getFastSourceItemId(), getFastProductItemId());
+    }
+
+    private boolean hasFastProgress()
+    {
+        return fastDeltaTracker.hasAnyChange(inventory);
+    }
+
+    private int getFastSourceItemId()
+    {
+        return settings.method == FletchingMethod.HEADLESS_ARROWS
+            ? FletchingSettings.ARROW_SHAFT_ID
+            : settings.dartType.tipId;
+    }
+
+    private int getFastProductItemId()
+    {
+        return settings.method == FletchingMethod.HEADLESS_ARROWS
+            ? FletchingSettings.HEADLESS_ARROW_ID
+            : settings.dartType.dartId;
+    }
+
+    private void resetFastTracking()
+    {
+        fastDeltaTracker.reset();
+        fastWaitTicks = 0;
     }
 }

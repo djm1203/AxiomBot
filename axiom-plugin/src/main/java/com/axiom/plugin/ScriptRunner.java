@@ -6,6 +6,7 @@ import com.axiom.api.util.Antiban;
 import com.axiom.api.util.Log;
 import com.axiom.plugin.impl.game.PlayersImpl;
 import com.axiom.plugin.impl.game.GameObjectsImpl;
+import com.axiom.plugin.impl.game.MessagesImpl;
 import com.axiom.plugin.impl.game.NpcsImpl;
 import com.axiom.plugin.impl.game.GroundItemsImpl;
 import com.axiom.plugin.impl.game.WidgetsImpl;
@@ -24,6 +25,7 @@ import com.axiom.plugin.util.SessionStats;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GameState;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
@@ -52,6 +54,7 @@ public class ScriptRunner
     // ── Injected API implementations ──────────────────────────────────────────
     private final PlayersImpl       players;
     private final GameObjectsImpl   gameObjects;
+    private final MessagesImpl      messages;
     private final NpcsImpl          npcs;
     private final GroundItemsImpl   groundItems;
     private final WidgetsImpl       widgets;
@@ -79,11 +82,12 @@ public class ScriptRunner
     private volatile boolean     logoutPaused     = false;
 
     private int consecutiveErrors  = 0;
+    private int currentTick        = 0;
     private static final int MAX_CONSECUTIVE_ERRORS = 5;
 
     @Inject
     public ScriptRunner(
-        PlayersImpl players, GameObjectsImpl gameObjects, NpcsImpl npcs,
+        PlayersImpl players, GameObjectsImpl gameObjects, MessagesImpl messages, NpcsImpl npcs,
         GroundItemsImpl groundItems, WidgetsImpl widgets,
         InventoryImpl inventory, EquipmentImpl equipment,
         SkillsImpl skills, PrayerImpl prayer,
@@ -95,6 +99,7 @@ public class ScriptRunner
     {
         this.players      = players;
         this.gameObjects  = gameObjects;
+        this.messages     = messages;
         this.npcs         = npcs;
         this.groundItems  = groundItems;
         this.widgets      = widgets;
@@ -144,6 +149,7 @@ public class ScriptRunner
     @Subscribe
     public void onGameTick(GameTick event)
     {
+        currentTick++;
         switch (state)
         {
             case STOPPED:
@@ -168,8 +174,33 @@ public class ScriptRunner
                     return;
                 }
 
+                if (widgets.isLevelUpDialogOpen())
+                {
+                    botLog.info("Dismissing level-up dialog before resuming " + activeScript.getName());
+                    widgets.dismissLevelUpDialog();
+                    return;
+                }
+
+                if (widgets.dismissContinueDialog())
+                {
+                    botLog.info("Dismissing continue dialog before resuming " + activeScript.getName());
+                    return;
+                }
+
                 if (activeScript.hasTickDelay())
                 {
+                    if (antiban.shouldIdleAction(0.01))
+                    {
+                        antiban.performAttentionDrift();
+                    }
+                    else if (antiban.shouldIdleAction(0.004))
+                    {
+                        antiban.performCameraJitter();
+                    }
+                    else if (antiban.shouldIdleAction(0.003))
+                    {
+                        antiban.performTabGlance();
+                    }
                     activeScript.decrementTickDelay();
                     return;
                 }
@@ -206,6 +237,12 @@ public class ScriptRunner
         }
     }
 
+    @Subscribe
+    public void onChatMessage(ChatMessage event)
+    {
+        messages.record(event.getMessage(), currentTick);
+    }
+
     // ── Control ───────────────────────────────────────────────────────────────
 
     /**
@@ -227,9 +264,11 @@ public class ScriptRunner
         script.onStart(settings);
         antiban.reset();
         consecutiveErrors = 0;
+        currentTick       = 0;
         logoutPaused      = false;
         scriptStartMs     = System.currentTimeMillis();
         sessionStats.reset();
+        messages.clear();
         state             = ScriptState.RUNNING;
     }
 
@@ -246,7 +285,9 @@ public class ScriptRunner
         botLog.setLoggerClass(com.axiom.api.util.Log.class);
         sessionStats.stop();
         scriptStartMs = 0;
+        currentTick   = 0;
         logoutPaused  = false;
+        messages.clear();
         state         = ScriptState.STOPPED;
     }
 
@@ -284,6 +325,7 @@ public class ScriptRunner
     {
         injectField(script, "players",     players);
         injectField(script, "gameObjects", gameObjects);
+        injectField(script, "messages",    messages);
         injectField(script, "npcs",        npcs);
         injectField(script, "groundItems", groundItems);
         injectField(script, "widgets",     widgets);

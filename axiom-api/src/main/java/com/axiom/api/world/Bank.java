@@ -34,6 +34,17 @@ public interface Bank
      */
     boolean openNearest();
 
+    /**
+     * Walks toward and opens a bank using the given location profile when one is
+     * available. Implementations may use profile bank anchors, preferred bank
+     * object/NPC names, and preferred bank actions before falling back to the
+     * generic nearest-bank behavior.
+     */
+    default boolean openNearest(LocationProfile locationProfile)
+    {
+        return openNearest();
+    }
+
     /** Deposits all items currently in the inventory. */
     void depositAll();
 

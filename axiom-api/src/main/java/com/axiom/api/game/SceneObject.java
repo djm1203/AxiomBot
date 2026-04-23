@@ -39,6 +39,13 @@ public interface SceneObject
     void interact(String action);
 
     /**
+     * Uses the currently selected item or spell on this object.
+     * Scripts should call an item-selection method first, then invoke this on
+     * the next tick to perform item-on-object or spell-on-object interactions.
+     */
+    default void useSelected() {}
+
+    /**
      * For NPCs: returns true if this NPC is currently engaged in combat with any actor.
      * Used by the combat script to skip NPCs already being fought by another player.
      * Always returns false for non-NPC objects (game objects, ground items).

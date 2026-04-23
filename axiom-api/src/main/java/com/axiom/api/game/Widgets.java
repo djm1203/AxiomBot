@@ -30,6 +30,14 @@ public interface Widgets
     void clickMakeAll();
 
     /**
+     * Clicks a specific production option whose visible text contains the given
+     * string, case-insensitive.
+     *
+     * @return true if a matching widget was found and clicked
+     */
+    boolean clickMakeOption(String text);
+
+    /**
      * Clicks "Make X" on the production dialog and types the given quantity.
      * No-op if the dialog is not open.
      */
@@ -57,6 +65,19 @@ public interface Widgets
     void dismissLevelUpDialog();
 
     /**
+     * Returns true if a generic "Click here to continue" dialog is visible.
+     * This is used for transient interruptions that should not stop scripts.
+     */
+    boolean isContinueDialogOpen();
+
+    /**
+     * Dismisses a generic continue dialog if one is open.
+     *
+     * @return true if a continue dialog was found and clicked
+     */
+    boolean dismissContinueDialog();
+
+    /**
      * Returns true if the widget at (groupId, childId) exists and is not hidden.
      * Use this to check whether a spellbook spell or other UI component is visible
      * before attempting to click it.
@@ -71,6 +92,14 @@ public interface Widgets
      * CC_OP is silently ignored in this RuneLite build.
      */
     void clickWidget(int groupId, int childId);
+
+    /**
+     * Clicks the first visible widget in the given group whose text or action
+     * contains the provided string, case-insensitive.
+     *
+     * @return true if a matching widget was found and clicked
+     */
+    boolean clickWidgetContainingText(int groupId, String text);
 
     /**
      * Returns true if the smithing interface (group 312) is open.

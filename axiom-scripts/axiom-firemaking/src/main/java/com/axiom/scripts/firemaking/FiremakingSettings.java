@@ -10,6 +10,40 @@ import com.axiom.api.script.ScriptSettings;
  */
 public class FiremakingSettings extends ScriptSettings
 {
+    public enum FiremakingMode
+    {
+        STATIONARY("Stationary"),
+        LINE_FIRE("Line fire"),
+        GE_NOTED("GE noted logs"),
+        CAMPFIRE("Forester's campfire");
+
+        public final String displayName;
+
+        FiremakingMode(String displayName)
+        {
+            this.displayName = displayName;
+        }
+    }
+
+    public enum LaneDirection
+    {
+        WEST("West", -1, 0),
+        EAST("East", 1, 0),
+        NORTH("North", 0, 1),
+        SOUTH("South", 0, -1);
+
+        public final String displayName;
+        public final int dx;
+        public final int dy;
+
+        LaneDirection(String displayName, int dx, int dy)
+        {
+            this.displayName = displayName;
+            this.dx = dx;
+            this.dy = dy;
+        }
+    }
+
     /** Log types with their inventory item IDs and required Firemaking level. */
     public enum LogType
     {
@@ -38,6 +72,8 @@ public class FiremakingSettings extends ScriptSettings
         }
     }
 
+    public final FiremakingMode mode;
+    public final LaneDirection laneDirection;
     public final LogType logType;
 
     /** True = walk to bank for more logs when inventory runs out. */
@@ -50,11 +86,15 @@ public class FiremakingSettings extends ScriptSettings
     public final int breakDurationMinutes;
 
     public FiremakingSettings(
+        FiremakingMode mode,
+        LaneDirection laneDirection,
         LogType logType,
         boolean bankForLogs,
         int     breakIntervalMinutes,
         int     breakDurationMinutes)
     {
+        this.mode                 = mode != null ? mode : FiremakingMode.STATIONARY;
+        this.laneDirection        = laneDirection != null ? laneDirection : LaneDirection.WEST;
         this.logType              = logType;
         this.bankForLogs          = bankForLogs;
         this.breakIntervalMinutes = breakIntervalMinutes;
@@ -64,6 +104,6 @@ public class FiremakingSettings extends ScriptSettings
     /** Sensible defaults used when no config dialog is shown. */
     public static FiremakingSettings defaults()
     {
-        return new FiremakingSettings(LogType.NORMAL, false, 60, 5);
+        return new FiremakingSettings(FiremakingMode.STATIONARY, LaneDirection.WEST, LogType.NORMAL, false, 60, 5);
     }
 }

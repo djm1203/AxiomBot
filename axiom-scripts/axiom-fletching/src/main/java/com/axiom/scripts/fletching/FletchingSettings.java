@@ -14,13 +14,43 @@ public class FletchingSettings extends ScriptSettings
     {
         KNIFE_LOGS("Knife on logs"),
         STRING_BOW("String bow"),
-        DARTS("Dart tips + feathers");
+        DARTS("Dart tips + feathers"),
+        ARROW_SHAFTS("Arrow shafts"),
+        HEADLESS_ARROWS("Headless arrows");
 
         public final String displayName;
 
         FletchingMethod(String displayName)
         {
             this.displayName = displayName;
+        }
+    }
+
+    public enum KnifeProduct
+    {
+        SHORTBOW("Shortbow"),
+        LONGBOW("Longbow");
+
+        public final String displayName;
+
+        KnifeProduct(String displayName)
+        {
+            this.displayName = displayName;
+        }
+
+        public String getProductName(LogType logType)
+        {
+            switch (logType)
+            {
+                case NORMAL: return this == SHORTBOW ? "Shortbow (u)" : "Longbow (u)";
+                case OAK:    return this == SHORTBOW ? "Oak shortbow (u)" : "Oak longbow (u)";
+                case WILLOW: return this == SHORTBOW ? "Willow shortbow (u)" : "Willow longbow (u)";
+                case TEAK:   return this == SHORTBOW ? "Teak stock" : "Teak stock";
+                case MAPLE:  return this == SHORTBOW ? "Maple shortbow (u)" : "Maple longbow (u)";
+                case YEW:    return this == SHORTBOW ? "Yew shortbow (u)" : "Yew longbow (u)";
+                case MAGIC:  return this == SHORTBOW ? "Magic shortbow (u)" : "Magic longbow (u)";
+                default:     return logType.logName;
+            }
         }
     }
 
@@ -108,8 +138,12 @@ public class FletchingSettings extends ScriptSettings
         }
     }
 
+    public static final int ARROW_SHAFT_ID = 52;
+    public static final int HEADLESS_ARROW_ID = 53;
+
     public final FletchingMethod method;
     public final LogType         logType;
+    public final KnifeProduct    knifeProduct;
     public final BowType         bowType;
     public final DartType        dartType;
 
@@ -122,6 +156,7 @@ public class FletchingSettings extends ScriptSettings
     public FletchingSettings(
         FletchingMethod method,
         LogType         logType,
+        KnifeProduct    knifeProduct,
         BowType         bowType,
         DartType        dartType,
         boolean         bankForMaterials,
@@ -130,6 +165,7 @@ public class FletchingSettings extends ScriptSettings
     {
         this.method               = method;
         this.logType              = logType;
+        this.knifeProduct         = knifeProduct;
         this.bowType              = bowType;
         this.dartType             = dartType;
         this.bankForMaterials     = bankForMaterials;
@@ -142,6 +178,7 @@ public class FletchingSettings extends ScriptSettings
         return new FletchingSettings(
             FletchingMethod.KNIFE_LOGS,
             LogType.OAK,
+            KnifeProduct.SHORTBOW,
             BowType.OAK_SHORTBOW_U,
             DartType.BRONZE,
             false, 60, 5

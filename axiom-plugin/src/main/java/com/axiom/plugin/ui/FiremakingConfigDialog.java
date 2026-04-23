@@ -1,6 +1,8 @@
 package com.axiom.plugin.ui;
 
 import com.axiom.scripts.firemaking.FiremakingSettings;
+import com.axiom.scripts.firemaking.FiremakingSettings.FiremakingMode;
+import com.axiom.scripts.firemaking.FiremakingSettings.LaneDirection;
 import com.axiom.scripts.firemaking.FiremakingSettings.LogType;
 
 import javax.swing.JCheckBox;
@@ -19,6 +21,8 @@ public class FiremakingConfigDialog extends ScriptConfigDialog<FiremakingSetting
 {
     // ── Controls ──────────────────────────────────────────────────────────────
     private JComboBox<String> logCombo;
+    private JComboBox<String> modeCombo;
+    private JComboBox<String> laneCombo;
     private JCheckBox         bankBox;
     private JSpinner          breakIntervalSpinner;
     private JSpinner          breakDurationSpinner;
@@ -39,6 +43,14 @@ public class FiremakingConfigDialog extends ScriptConfigDialog<FiremakingSetting
         root.setBackground(AxiomTheme.BG_PANEL);
         root.setBorder(new javax.swing.border.EmptyBorder(
             AxiomTheme.PAD_MD, AxiomTheme.PAD_LG, AxiomTheme.PAD_MD, AxiomTheme.PAD_LG));
+
+        AxiomSectionPanel modeSection = new AxiomSectionPanel("MODE");
+        modeCombo = makeCombo(modeDisplayNames());
+        laneCombo = makeCombo(laneDisplayNames());
+        modeSection.addRow("Mode", modeCombo);
+        modeSection.addRow("Lane direction", laneCombo);
+        root.add(modeSection);
+        root.add(javax.swing.Box.createRigidArea(new java.awt.Dimension(0, AxiomTheme.PAD_SM)));
 
         // ── Section: Log Type ──────────────────────────────────────────────
         AxiomSectionPanel logSection = new AxiomSectionPanel("LOG TYPE");
@@ -77,15 +89,33 @@ public class FiremakingConfigDialog extends ScriptConfigDialog<FiremakingSetting
     @Override
     public FiremakingSettings getSettings()
     {
+        FiremakingMode mode = modeFromIndex(modeCombo.getSelectedIndex());
+        LaneDirection laneDirection = laneDirectionFromIndex(laneCombo.getSelectedIndex());
         LogType logType      = logTypeFromIndex(logCombo.getSelectedIndex());
         boolean bankForLogs  = bankBox.isSelected();
         int breakInterval    = (Integer) breakIntervalSpinner.getValue();
         int breakDuration    = (Integer) breakDurationSpinner.getValue();
 
-        return new FiremakingSettings(logType, bankForLogs, breakInterval, breakDuration);
+        return new FiremakingSettings(mode, laneDirection, logType, bankForLogs, breakInterval, breakDuration);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static String[] modeDisplayNames()
+    {
+        FiremakingMode[] modes = FiremakingMode.values();
+        String[] names = new String[modes.length];
+        for (int i = 0; i < modes.length; i++) names[i] = modes[i].displayName;
+        return names;
+    }
+
+    private static String[] laneDisplayNames()
+    {
+        LaneDirection[] directions = LaneDirection.values();
+        String[] names = new String[directions.length];
+        for (int i = 0; i < directions.length; i++) names[i] = directions[i].displayName;
+        return names;
+    }
 
     private static String[] logDisplayNames()
     {
@@ -110,6 +140,18 @@ public class FiremakingConfigDialog extends ScriptConfigDialog<FiremakingSetting
             case REDWOOD:   return "Redwood Logs";
             default:        return type.name();
         }
+    }
+
+    private static FiremakingMode modeFromIndex(int idx)
+    {
+        FiremakingMode[] modes = FiremakingMode.values();
+        return (idx >= 0 && idx < modes.length) ? modes[idx] : FiremakingMode.STATIONARY;
+    }
+
+    private static LaneDirection laneDirectionFromIndex(int idx)
+    {
+        LaneDirection[] directions = LaneDirection.values();
+        return (idx >= 0 && idx < directions.length) ? directions[idx] : LaneDirection.WEST;
     }
 
     private static LogType logTypeFromIndex(int idx)
