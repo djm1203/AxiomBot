@@ -35,9 +35,14 @@ public class MiningSettings extends ScriptSettings
 
     public enum OreType
     {
+        // Depleted rock IDs are the empty-rock GameObject IDs (not ore item IDs).
+        // VERIFY LIVE: only IRON depleted IDs are confirmed (8828, 8829). The other
+        // ores' depleted IDs were copied from the legacy table and need confirmation
+        // via the RuneLite Object Markers plugin on a depleted rock at each ore site.
         COPPER    ("Copper ore",     436, new int[]{ 10943, 11161 }, new int[]{ 11189 },  1),
         TIN       ("Tin ore",        438, new int[]{ 11360, 11361 }, new int[]{ 11192 },  1),
-        IRON      ("Iron ore",       440, new int[]{ 11364, 11365 }, new int[]{ 11193 }, 15),
+        // Iron has two active visual variants (11364, 11365) and two depleted variants (8828, 8829).
+        IRON      ("Iron ore",       440, new int[]{ 11364, 11365 }, new int[]{ 8828, 8829 }, 15),
         COAL      ("Coal",           453, new int[]{ 11366, 11367 }, new int[]{ 11190 }, 30),
         GOLD      ("Gold ore",       444, new int[]{ 11370, 11371 }, new int[]{ 11191 }, 40),
         MITHRIL   ("Mithril ore",    447, new int[]{ 11372, 11373 }, new int[]{ 11194 }, 55),

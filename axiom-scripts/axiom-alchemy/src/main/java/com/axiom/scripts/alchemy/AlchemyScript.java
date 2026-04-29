@@ -62,8 +62,7 @@ public class AlchemyScript extends BotScript
     // 7 ticks = 5-tick alchemy cooldown plus a small grace window.
     private static final int ANIMATION_TIMEOUT_TICKS = 7;
     private static final int CAST_COOLDOWN_TICKS = 5;
-    // Animation ID 712 = High Alchemy / Low Alchemy cast animation.
-    private static final int ALCH_ANIMATION_ID = 712;
+    // Animation IDs are spell-specific (Low = 712, High = 713) — read from settings.spell.
     private static final int NATURE_RUNE_ID = 561;
     private static final int FIRE_RUNE_ID   = 554;
     private static final int MAX_SPELL_WIDGET_RETRIES = 4;
@@ -234,9 +233,10 @@ public class AlchemyScript extends BotScript
         }
 
         boolean itemConsumed = itemDeltaTracker.hasAnyDecrease(inventory);
-        if (players.getAnimation() == ALCH_ANIMATION_ID)
+        int expectedAnimationId = settings.spell.animationId;
+        if (players.getAnimation() == expectedAnimationId)
         {
-            if (!wasAnimating) log.info("[WAITING] Alchemy animation started (id={})", ALCH_ANIMATION_ID);
+            if (!wasAnimating) log.info("[WAITING] Alchemy animation started (id={})", expectedAnimationId);
             else               log.debug("[WAITING] Still casting...");
             wasAnimating     = true;
             noAnimationTicks = 0;

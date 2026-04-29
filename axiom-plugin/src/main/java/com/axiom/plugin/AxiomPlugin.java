@@ -7,7 +7,9 @@ import com.axiom.plugin.util.AutoUpdater;
 import com.axiom.plugin.ui.AxiomPanel;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GameState;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -22,6 +24,8 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Main RuneLite plugin entry point for Axiom.
@@ -57,6 +61,10 @@ public class AxiomPlugin extends Plugin
     private NavigationButton navButton;
     private boolean          autoStartFired = false;
 
+    // EventBus subscriptions registered in startUp() — held so we can
+    // unregister them precisely on shutDown(). See registerEventHandlers().
+    private final List<EventBus.Subscriber> registeredSubscribers = new ArrayList<>();
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     @Override
@@ -67,9 +75,15 @@ public class AxiomPlugin extends Plugin
         // Check for plugin updates in the background (non-blocking)
         AutoUpdater.checkAsync();
 
-        // Register ScriptRunner and this plugin to receive game events
-        eventBus.register(scriptRunner);
-        eventBus.register(this);
+        // Register ScriptRunner and this plugin to receive game events.
+        // Uses explicit Consumer-based registration instead of eventBus.register(object)
+        // because the latter fails with LambdaConversionException for sideloaded plugins
+        // under --developer-mode. RuneLite's PluginClassLoader does not implement
+        // PrivateLookupableClassLoader, so privateLookupIn() can't grant module-private
+        // access across modules and the LambdaMetafactory rejects the call. The
+        // overload below stores the supplied Consumer directly — method references are
+        // resolved at this call site (same module as the target class) so they work.
+        registerEventHandlers();
 
         // Register the in-game overlay
         overlayManager.add(botOverlay);
@@ -92,8 +106,7 @@ public class AxiomPlugin extends Plugin
         log.info("Axiom shutting down");
 
         scriptRunner.stop();
-        eventBus.unregister(scriptRunner);
-        eventBus.unregister(this);
+        unregisterEventHandlers();
         overlayManager.remove(botOverlay);
 
         if (navButton != null)
@@ -103,6 +116,27 @@ public class AxiomPlugin extends Plugin
         }
 
         log.info("Axiom stopped");
+    }
+
+    private void registerEventHandlers()
+    {
+        registeredSubscribers.add(
+            eventBus.register(GameTick.class,         scriptRunner::onGameTick,         0f));
+        registeredSubscribers.add(
+            eventBus.register(ChatMessage.class,      scriptRunner::onChatMessage,      0f));
+        registeredSubscribers.add(
+            eventBus.register(GameStateChanged.class, scriptRunner::onGameStateChanged, 0f));
+        registeredSubscribers.add(
+            eventBus.register(GameStateChanged.class, this::onGameStateChanged,         0f));
+    }
+
+    private void unregisterEventHandlers()
+    {
+        for (EventBus.Subscriber subscriber : registeredSubscribers)
+        {
+            eventBus.unregister(subscriber);
+        }
+        registeredSubscribers.clear();
     }
 
     // ── Launcher auto-start ───────────────────────────────────────────────────

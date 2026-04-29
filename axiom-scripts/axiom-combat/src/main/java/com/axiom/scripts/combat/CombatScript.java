@@ -531,10 +531,6 @@ public class CombatScript extends BotScript
             return;
         }
 
-        log.info("[BANKING] Withdrawing food id={}", foodIdToWithdraw);
-        bank.withdrawAll(foodIdToWithdraw);
-        setTickDelay(1);
-
         log.info("[BANKING] Closing bank");
         bank.close();
         resetBankState();

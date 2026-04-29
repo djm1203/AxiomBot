@@ -14,24 +14,35 @@ public class AlchemySettings extends ScriptSettings
     /** Alchemy spell variant with its widget location and level requirement. */
     public enum AlchemySpell
     {
-        HIGH_ALCHEMY(55, 5, "High Level Alchemy", 218, 29),
-        LOW_ALCHEMY (21, 3, "Low Level Alchemy",  218, 25);
+        // Animation IDs are distinct per spell:
+        //   712 = Low Level Alchemy
+        //   713 = High Level Alchemy
+        // The previous shared constant (712) caused HIGH_ALCHEMY to never see its
+        // animation start, falling back to the cooldown timeout each cast.
+        HIGH_ALCHEMY(55, 5, "High Level Alchemy", 218, 29, 713),
+        LOW_ALCHEMY (21, 3, "Low Level Alchemy",  218, 25, 712);
 
         public final int    levelRequired;
         public final int    fireRuneCost;
         public final String displayName;
         /** Spellbook widget group ID. */
         public final int    widgetGroup;
-        /** Spellbook widget child ID for this spell. */
+        /** Spellbook widget child ID for this spell — VERIFY LIVE: child IDs may be
+         *  reshuffled by Jagex; AlchemyScript prefers text-based resolution and falls
+         *  back to this child only if text lookup fails. */
         public final int    widgetChild;
+        /** Player animation ID emitted while this spell is being cast. */
+        public final int    animationId;
 
-        AlchemySpell(int levelRequired, int fireRuneCost, String displayName, int widgetGroup, int widgetChild)
+        AlchemySpell(int levelRequired, int fireRuneCost, String displayName,
+                     int widgetGroup, int widgetChild, int animationId)
         {
             this.levelRequired = levelRequired;
             this.fireRuneCost  = fireRuneCost;
             this.displayName   = displayName;
             this.widgetGroup   = widgetGroup;
             this.widgetChild   = widgetChild;
+            this.animationId   = animationId;
         }
     }
 

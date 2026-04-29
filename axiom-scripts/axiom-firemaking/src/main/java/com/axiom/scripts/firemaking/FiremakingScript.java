@@ -3,6 +3,7 @@ package com.axiom.scripts.firemaking;
 import com.axiom.api.game.Messages;
 import com.axiom.api.game.Players;
 import com.axiom.api.game.GameObjects;
+import com.axiom.api.game.SceneObject;
 import com.axiom.api.game.Widgets;
 import com.axiom.api.player.Inventory;
 import com.axiom.api.script.BotScript;

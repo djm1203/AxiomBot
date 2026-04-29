@@ -137,7 +137,10 @@ public class CombatSettings extends ScriptSettings
         this.cannonReloadIntervalTicks = Math.max(5, cannonReloadIntervalTicks);
         this.aggressionResetEnabled = aggressionResetEnabled;
         this.aggressionResetIdleTicks = Math.max(5, aggressionResetIdleTicks);
-        this.aggressionResetDistance = Math.max(3, aggressionResetDistance);
+        // Aggression resets must cross the engine's 16-tile aggression boundary —
+        // walking less than that lets NPCs remain aggressive on return, defeating
+        // the reset entirely (sand crab spec).
+        this.aggressionResetDistance = Math.max(16, aggressionResetDistance);
         this.breakIntervalMinutes = breakIntervalMinutes;
         this.breakDurationMinutes = breakDurationMinutes;
     }
@@ -160,7 +163,7 @@ public class CombatSettings extends ScriptSettings
             15,
             false,
             30,
-            12,
+            16,
             60,
             5
         );

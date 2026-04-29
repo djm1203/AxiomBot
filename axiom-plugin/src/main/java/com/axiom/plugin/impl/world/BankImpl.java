@@ -14,6 +14,9 @@ import com.axiom.plugin.impl.world.CameraImpl;
 import com.axiom.plugin.util.RobotClick;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.InventoryID;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.MenuAction;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
@@ -32,6 +35,7 @@ public class BankImpl implements Bank
     // Minimum ms between path-click attempts while still walking toward the bank.
     // Prevents spam-firing interact() every 3 ticks, which resets the walk queue.
     private static final long WALK_CLICK_COOLDOWN_MS = 6_000L;
+    private static final int DIRECT_BANK_INTERACT_DISTANCE = 20;
 
     private final Client          client;
     private final GameObjectsImpl gameObjects;
@@ -133,16 +137,26 @@ public class BankImpl implements Bank
         {
             Pathfinder.ProgressState progressState =
                 pathfinder.getProgressTo(target.getWorldX(), target.getWorldY(), target.getPlane());
+            String bankAction = resolveBankAction(target, locationProfile);
 
-            // Send a bounded pathing step toward the bank rather than repeatedly
-            // clicking the booth itself while still walking. This keeps the walk
-            // queue more stable and lets PathfinderImpl handle blocked target tiles.
+            // For nearby booths/bankers, prefer a normal interact and let the game
+            // walk us onto a valid adjacent tile. Bank object tiles themselves are
+            // often not walkable, so routing directly onto them can stick.
             long now = System.currentTimeMillis();
             if (progressState == Pathfinder.ProgressState.STUCK || now - lastWalkClickMs >= WALK_CLICK_COOLDOWN_MS)
             {
-                log.info("[BANK] Walking to bank (distance={} progress={}) — sending pathfinder step",
-                    distance, progressState);
-                pathfinder.walkTo(target.getWorldX(), target.getWorldY(), client.getPlane());
+                if (distance <= DIRECT_BANK_INTERACT_DISTANCE)
+                {
+                    log.info("[BANK] Approaching bank (distance={} progress={}) — sending '{}' interact",
+                        distance, progressState, bankAction);
+                    target.interact(bankAction);
+                }
+                else
+                {
+                    log.info("[BANK] Walking to bank (distance={} progress={}) — sending pathfinder step",
+                        distance, progressState);
+                    pathfinder.walkTo(target.getWorldX(), target.getWorldY(), client.getPlane());
+                }
                 lastWalkClickMs = now;
             }
             return false;
@@ -176,31 +190,41 @@ public class BankImpl implements Bank
     @Override
     public boolean depositAllExcept(int... protectedIds)
     {
-        Widget container = client.getWidget(WidgetInfo.BANK_INVENTORY_ITEMS_CONTAINER);
-        if (container == null)
+        ItemContainer inventory = client.getItemContainer(InventoryID.INVENTORY);
+        if (inventory == null)
         {
-            log.warn("[BANK] depositAllExcept: inventory widget null");
+            log.warn("[BANK] depositAllExcept: inventory container null");
             return false;
         }
 
-        Widget[] slots = container.getDynamicChildren();
-        if (slots == null) return false;
-
-        for (int i = 0; i < slots.length; i++)
+        Widget bankInventory = client.getWidget(WidgetInfo.BANK_INVENTORY_ITEMS_CONTAINER);
+        if (bankInventory == null)
         {
-            Widget w = slots[i];
-            if (w == null || w.getItemId() == -1) continue;
-            if (isProtected(w.getItemId(), protectedIds)) continue;
+            log.warn("[BANK] depositAllExcept: bank inventory widget null");
+            return false;
+        }
+
+        Item[] items = inventory.getItems();
+        if (items == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < items.length; i++)
+        {
+            Item item = items[i];
+            if (item == null || item.getId() <= 0) continue;
+            if (isProtected(item.getId(), protectedIds)) continue;
 
             // Deposit-All for this item via its slot in the bank inventory panel.
             // op=4 = Deposit-All in the BANK_INVENTORY_ITEMS_CONTAINER context.
             client.menuAction(
-                i, container.getId(),
+                i, bankInventory.getId(),
                 MenuAction.CC_OP,
-                4, w.getItemId(),
+                4, item.getId(),
                 "Deposit-All", ""
             );
-            log.info("[BANK] depositAllExcept: slot={} itemId={}", i, w.getItemId());
+            log.info("[BANK] depositAllExcept: slot={} itemId={}", i, item.getId());
             return true; // one action per tick — caller retries next tick
         }
         return false; // inventory contains only protected items

@@ -187,10 +187,13 @@ public class WoodcuttingScript extends BotScript
         // so RuneLite API calls there will crash with AssertionError.
         if (!startTileRecorded)
         {
-            WorldTile startTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+            WorldTile playerTile = new WorldTile(players.getWorldX(), players.getWorldY(), players.getPlane());
+            WorldTile workAnchor = settings.locationPreset.workAnchor != null
+                ? settings.locationPreset.workAnchor
+                : playerTile;
             locationProfile = LocationProfile.centered(
                 "woodcutting-" + settings.locationPreset.name().toLowerCase(),
-                startTile,
+                workAnchor,
                 settings.locationPreset.workAreaRadius
             ).withBankTargets(
                 settings.locationPreset.bankObjectNames,
@@ -199,8 +202,10 @@ public class WoodcuttingScript extends BotScript
             );
             startTileRecorded = true;
             log.info("[INIT] Start tile recorded: ({},{},{})",
-                startTile.getWorldX(), startTile.getWorldY(), startTile.getPlane());
+                playerTile.getWorldX(), playerTile.getWorldY(), playerTile.getPlane());
             log.info("[INIT] Location preset: {}", settings.locationPreset.displayName);
+            log.info("[INIT] Work anchor: ({},{},{})",
+                workAnchor.getWorldX(), workAnchor.getWorldY(), workAnchor.getPlane());
         }
 
         if (forestryCooldownTicks > 0)
@@ -489,7 +494,6 @@ public class WoodcuttingScript extends BotScript
         List<SceneObject> trees = gameObjects.all(o ->
             o.getPlane() == players.getPlane()
                 && players.distanceTo(o.getWorldX(), o.getWorldY()) <= MAX_TREE_DISTANCE
-                && pathfinder.isReachable(o.getWorldX(), o.getWorldY(), o.getPlane())
                 && (treeType.matches(o.getId()) || o.getName().equalsIgnoreCase(treeType.objectName))
                 && o.hasAction("Chop down"));
 

@@ -2,6 +2,7 @@ package com.axiom.scripts.woodcutting;
 
 import com.axiom.api.script.ScriptSettings;
 import com.axiom.api.util.Progression;
+import com.axiom.api.world.WorldTile;
 
 /**
  * Configuration for the Woodcutting script.
@@ -16,12 +17,17 @@ public class WoodcuttingSettings extends ScriptSettings
         // Verify in-game with the RuneLite Object Markers plugin if a tree isn't found.
         NORMAL  ("Tree",        new int[]{ 1276, 1278 }),
         OAK     ("Oak tree",    new int[]{ 10820 }),
-        WILLOW  ("Willow tree", new int[]{ 10819, 10829, 10831, 10833 }),
-        MAPLE   ("Maple tree",  new int[]{ 10832, 10834 }),
+        WILLOW  ("Willow tree", new int[]{ 5551, 5552, 5553, 10819, 10829, 10831, 10833 }),
+        // Maple is 10832 only. The previous list collided with MAGIC (10834);
+        // including 10834 here meant a Maple session would lock onto Magic trees.
+        MAPLE   ("Maple tree",  new int[]{ 10832 }),
+        // VERIFY LIVE: yew tree IDs vary by location — confirm with Object Markers.
         YEW     ("Yew tree",    new int[]{ 10822, 10823 }),
         MAGIC   ("Magic tree",  new int[]{ 10834 }),
-        TEAK    ("Teak",        new int[]{ 10041 }),
-        MAHOGANY("Mahogany",    new int[]{ 10047 });
+        // Teak and Mahogany were inverted in the original table.
+        // Wiki: Teak = 9036, Mahogany = 9034 (both jungle hardwoods).
+        TEAK    ("Teak",        new int[]{ 9036 }),
+        MAHOGANY("Mahogany",    new int[]{ 9034 });
 
         public final String objectName;
         public final int[]  objectIds;
@@ -42,22 +48,24 @@ public class WoodcuttingSettings extends ScriptSettings
 
     public enum LocationPreset
     {
-        CUSTOM_START     ("Custom / Start Tile", 10, new String[0], new String[]{ "Banker" }, new String[]{ "Bank" }),
-        DRAYNOR_WILLOWS  ("Draynor Willows",      9, new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
-        VARROCK_WEST_OAKS("Varrock West Oaks",    9, new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
-        SEERS_MAPLES     ("Seers Maples",        11, new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
-        WOODCUTTING_GUILD_YEWS("Woodcutting Guild Yews", 11, new String[]{ "Bank chest" }, new String[]{ "Banker" }, new String[]{ "Use", "Bank" });
+        CUSTOM_START     ("Custom / Start Tile", 10, null, new String[0], new String[]{ "Banker" }, new String[]{ "Bank" }),
+        DRAYNOR_WILLOWS  ("Draynor Willows",      9, new WorldTile(3088, 3231, 0), new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        VARROCK_WEST_OAKS("Varrock West Oaks",    9, new WorldTile(3186, 3433, 0), new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        SEERS_MAPLES     ("Seers Maples",        11, new WorldTile(2729, 3480, 0), new String[]{ "Bank booth" }, new String[]{ "Banker" }, new String[]{ "Bank" }),
+        WOODCUTTING_GUILD_YEWS("Woodcutting Guild Yews", 11, new WorldTile(1593, 3495, 0), new String[]{ "Bank chest" }, new String[]{ "Banker" }, new String[]{ "Use", "Bank" });
 
         public final String displayName;
         public final int workAreaRadius;
+        public final WorldTile workAnchor;
         public final String[] bankObjectNames;
         public final String[] bankNpcNames;
         public final String[] bankActions;
 
-        LocationPreset(String displayName, int workAreaRadius, String[] bankObjectNames, String[] bankNpcNames, String[] bankActions)
+        LocationPreset(String displayName, int workAreaRadius, WorldTile workAnchor, String[] bankObjectNames, String[] bankNpcNames, String[] bankActions)
         {
             this.displayName = displayName;
             this.workAreaRadius = workAreaRadius;
+            this.workAnchor = workAnchor;
             this.bankObjectNames = bankObjectNames;
             this.bankNpcNames = bankNpcNames;
             this.bankActions = bankActions;

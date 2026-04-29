@@ -82,6 +82,9 @@ public class ThievingScript extends BotScript
     private static final int STICKY_TARGET_RADIUS = 2;
     private static final int STALL_GUARD_RADIUS = 5;
     private static final int BLACKJACK_WAIT_TICKS = 6;
+    // Pickpocket stun lasts 8 game ticks (~4.8s). Earlier delays (4 ticks) caused
+    // the script to retry while still stunned, doubling the failure rate.
+    private static final int STUN_RECOVERY_TICKS = 8;
 
     private final RetryBudget stickyTargetRetries = new RetryBudget(4);
     private int lastNpcId = -1;
@@ -254,7 +257,7 @@ public class ThievingScript extends BotScript
                 return;
             }
             log.info("[FIND_NPC] Stunned — waiting");
-            setTickDelay(4);
+            setTickDelay(STUN_RECOVERY_TICKS);
             return;
         }
 
@@ -299,7 +302,7 @@ public class ThievingScript extends BotScript
                 return;
             }
             log.info("[BLACKJACK] Stunned — waiting");
-            setTickDelay(4);
+            setTickDelay(STUN_RECOVERY_TICKS);
             return;
         }
 
@@ -349,7 +352,7 @@ public class ThievingScript extends BotScript
             }
             log.info("[PICKPOCKETING] Stunned — waiting out stun");
             noChangeTicks = 0;
-            setTickDelay(4);
+            setTickDelay(STUN_RECOVERY_TICKS);
             state = State.FIND_TARGET;
             return;
         }
@@ -411,7 +414,7 @@ public class ThievingScript extends BotScript
             blackjackPickpocketsRemaining = 0;
             blackjackWaitTicks = 0;
             state = State.FIND_TARGET;
-            setTickDelay(4);
+            setTickDelay(STUN_RECOVERY_TICKS);
             return;
         }
 
@@ -507,7 +510,7 @@ public class ThievingScript extends BotScript
             blackjackPickpocketsRemaining = 0;
             noChangeTicks = 0;
             state = State.FIND_TARGET;
-            setTickDelay(4);
+            setTickDelay(STUN_RECOVERY_TICKS);
             return;
         }
 
