@@ -136,18 +136,11 @@ public class ClientManager
         cmd.add("-Daxiom.window.x=" + windowX);
         cmd.add("-Daxiom.window.y=" + windowY);
 
-        // Proxy (standard Java HTTPS/HTTP system properties)
+        // Proxy host/port — not sensitive, safe as system properties
         if (proxy != null)
         {
             cmd.add("-Dhttps.proxyHost=" + proxy.host);
             cmd.add("-Dhttps.proxyPort=" + proxy.port);
-            if (proxy.username != null && !proxy.username.isEmpty())
-            {
-                cmd.add("-Dhttp.proxyUser=" + proxy.username);
-                // passwordEnc holds plaintext after ProxyRepository.mapRow() decrypts it
-                String password = proxy.passwordEnc != null ? proxy.passwordEnc : "";
-                cmd.add("-Dhttp.proxyPassword=" + password);
-            }
         }
 
         // JAR path
@@ -170,6 +163,16 @@ public class ClientManager
         {
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true); // merge stderr into stdout
+
+            // Proxy credentials are passed via environment variables rather than
+            // -D system properties to avoid exposure in Task Manager / ps output.
+            // LauncherBridge reads these and installs a java.net.Authenticator.
+            if (proxy != null && proxy.username != null && !proxy.username.isEmpty())
+            {
+                String password = proxy.passwordEnc != null ? proxy.passwordEnc : "";
+                pb.environment().put("AXIOM_PROXY_USER",     proxy.username);
+                pb.environment().put("AXIOM_PROXY_PASSWORD", password);
+            }
 
             // Redirect output to a per-instance log file in ~/.axiom/logs/
             File logsDir = new File(Database.getAxiomDir(), "logs");

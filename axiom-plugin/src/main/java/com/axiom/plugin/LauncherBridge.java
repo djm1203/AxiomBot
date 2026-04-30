@@ -2,19 +2,24 @@ package com.axiom.plugin;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.net.Authenticator;
+import java.net.PasswordAuthentication;
+
 /**
- * Reads launch configuration passed from the Axiom Launcher via system properties.
+ * Reads launch configuration passed from the Axiom Launcher via system properties
+ * and environment variables.
  *
- * Phase 1: stub — reads system properties but takes no automatic action.
- * Phase 3: the launcher will spawn RuneLite with these args and this class
- * will auto-start the specified script.
- *
- * Properties set by the launcher:
+ * System properties set by the launcher:
  *   -Daxiom.script="Axiom Woodcutting"   → script to auto-start
  *   -Daxiom.world=302                    → world to hop to on start
  *   -Daxiom.account.id=<characterId>     → Jagex character ID for this instance
  *   -Daxiom.window.x=0                   → window X position
  *   -Daxiom.window.y=0                   → window Y position
+ *   -Dhttps.proxyHost / -Dhttps.proxyPort → proxy routing (non-sensitive)
+ *
+ * Environment variables set by the launcher (kept out of process command line):
+ *   AXIOM_PROXY_USER     → proxy authentication username
+ *   AXIOM_PROXY_PASSWORD → proxy authentication password
  */
 @Slf4j
 public class LauncherBridge
@@ -41,6 +46,36 @@ public class LauncherBridge
                 scriptName, world, redact(accountId));
             log.debug("LauncherBridge: full account id='{}'", accountId);
         }
+
+        installProxyAuthenticator();
+    }
+
+    /**
+     * Registers a java.net.Authenticator for proxy authentication if the launcher
+     * passed credentials via AXIOM_PROXY_USER / AXIOM_PROXY_PASSWORD env vars.
+     * Environment variables are not visible in the Windows Task Manager command-line
+     * column, unlike -D system properties.
+     */
+    private static void installProxyAuthenticator()
+    {
+        String user = System.getenv("AXIOM_PROXY_USER");
+        if (user == null || user.isEmpty()) return;
+
+        String rawPass = System.getenv("AXIOM_PROXY_PASSWORD");
+        char[] pass    = rawPass != null ? rawPass.toCharArray() : new char[0];
+
+        Authenticator.setDefault(new Authenticator()
+        {
+            @Override
+            protected PasswordAuthentication getPasswordAuthentication()
+            {
+                if (getRequestorType() == RequestorType.PROXY)
+                    return new PasswordAuthentication(user, pass);
+                return null;
+            }
+        });
+
+        log.info("LauncherBridge: proxy authenticator registered (user='{}')", redact(user));
     }
 
     /** Returns the script name to auto-start, or empty string if not set. */

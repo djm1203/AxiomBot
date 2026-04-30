@@ -76,3 +76,5 @@ notes/
 
 # Internal architecture / planning docs — not for distribution
 docs/
+
+axiom-launcher/dist/

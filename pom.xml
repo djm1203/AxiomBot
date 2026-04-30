@@ -23,6 +23,35 @@
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <runelite.version>1.12.23</runelite.version>
+
+        <!--
+            Distribution version — used by the `release` profile in axiom-plugin
+            and axiom-launcher to produce clean, classifier-free jar names
+            (e.g. axiom-plugin-1.0.jar) suitable for installer bundling.
+            Bump this when shipping a public release. The Maven project
+            version (1.0-SNAPSHOT) is unrelated to consumer-facing versioning.
+        -->
+        <axiom.distVersion>1.0</axiom.distVersion>
+
+        <!--
+            JDK home used by ProGuard for its library-jar lookups (jmods).
+            Defaults to the JVM running Maven. Override when JAVA_HOME points
+            at a JDK that ships without jmods (recent Adoptium JDK 25 builds):
+
+                mvn -P release verify -Daxiom.proguardJdkHome="C:/Program Files/Eclipse Adoptium/jdk-11.0.30.7-hotspot"
+        -->
+        <axiom.proguardJdkHome>${java.home}</axiom.proguardJdkHome>
+
+        <!--
+            JDK home that provides jlink and jpackage.
+            Defaults to the JVM running Maven. Override when the build JDK is
+            older than 14 (no jpackage) — e.g. when JAVA_HOME is JDK 11:
+
+                mvn -P release verify -Daxiom.jpackageHome="C:/Program Files/Eclipse Adoptium/jdk-25.0.2.10-hotspot"
+
+            Used only inside the `release` profile.
+        -->
+        <axiom.jpackageHome>${java.home}</axiom.jpackageHome>
     </properties>
 
     <repositories>
@@ -53,7 +82,7 @@
             <dependency>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
-                <version>1.18.30</version>
+                <version>1.18.36</version>
                 <scope>provided</scope>
             </dependency>
 
@@ -89,7 +118,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.11.0</version>
+                    <version>3.13.0</version>
                     <configuration>
                         <source>11</source>
                         <target>11</target>
@@ -97,7 +126,7 @@
                             <path>
                                 <groupId>org.projectlombok</groupId>
                                 <artifactId>lombok</artifactId>
-                                <version>1.18.30</version>
+                                <version>1.18.36</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>

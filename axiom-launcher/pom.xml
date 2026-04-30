@@ -155,12 +155,68 @@
         -->
         <profile>
             <id>release</id>
+            <dependencies>
+                <!-- JavaFX 17 Windows platform JARs.
+                     The non-classified javafx-*.jar artifacts on Maven Central are
+                     empty module-descriptor stubs; all real classes (including
+                     QuantumToolkit, Prism, Glass, etc.) and the embedded native DLLs
+                     live in the win-classified artifacts. Adding them here ensures the
+                     shade plugin (which runs during the release-profile build) bundles
+                     the actual JavaFX runtime into the fat JAR used by jpackage.
+                     Not needed for dev builds / mvn javafx:run. -->
+                <dependency>
+                    <groupId>org.openjfx</groupId>
+                    <artifactId>javafx-base</artifactId>
+                    <version>17</version>
+                    <classifier>win</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.openjfx</groupId>
+                    <artifactId>javafx-graphics</artifactId>
+                    <version>17</version>
+                    <classifier>win</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.openjfx</groupId>
+                    <artifactId>javafx-controls</artifactId>
+                    <version>17</version>
+                    <classifier>win</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.openjfx</groupId>
+                    <artifactId>javafx-fxml</artifactId>
+                    <version>17</version>
+                    <classifier>win</classifier>
+                </dependency>
+            </dependencies>
             <build>
                 <plugins>
+                    <!--
+                        Skip target/dist/ during clean — Windows Defender locks the
+                        previously-built installer EXE for several seconds after creation.
+                        The antrun verify step deletes dist/ itself (quiet="true") before
+                        jpackage recreates it, so Maven's clean doesn't need to touch it.
+                    -->
+                    <plugin>
+                        <artifactId>maven-clean-plugin</artifactId>
+                        <configuration>
+                            <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                            <filesets>
+                                <fileset>
+                                    <directory>${project.build.directory}</directory>
+                                    <excludes>
+                                        <exclude>dist/**</exclude>
+                                    </excludes>
+                                    <followSymlinks>false</followSymlinks>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </plugin>
+
                     <plugin>
                         <groupId>com.github.wvengen</groupId>
                         <artifactId>proguard-maven-plugin</artifactId>
-                        <version>2.6.0</version>
+                        <version>2.7.0</version>
                         <executions>
                             <execution>
                                 <phase>package</phase>
@@ -168,9 +224,16 @@
                             </execution>
                         </executions>
                         <configuration>
-                            <proguardVersion>7.4.2</proguardVersion>
+                            <!-- Use whatever ProGuard the plugin bundles (7.7.0 in 2.7.0).
+                                 Overriding to 7.9.1 with separate proguard-base/core deps
+                                 conflicts with the plugin's own classloader. -->
+                            <proguardVersion>7.7.0</proguardVersion>
                             <injar>${project.build.finalName}.jar</injar>
-                            <outjar>${project.build.finalName}-release.jar</outjar>
+                            <!--
+                                Clean distribution name — no -SNAPSHOT, no -release
+                                classifier. Driven by axiom.distVersion in the parent pom.
+                            -->
+                            <outjar>axiom-launcher-${axiom.distVersion}.jar</outjar>
                             <outputDirectory>${project.build.directory}</outputDirectory>
                             <obfuscate>true</obfuscate>
                             <options>
@@ -212,13 +275,52 @@
                                     public static ** valueOf(java.lang.String);
                                 }</option>
 
+                                <!-- ── Third-party libraries bundled in the fat JAR.
+                                     Service files (META-INF/services/*), native-lib
+                                     resource paths, and annotation class names all
+                                     reference class names as strings — renaming them
+                                     breaks JDBC driver loading, JNA dispatch, picocli
+                                     parsing, and logback binding. Keep originals. -->
+                                <option>-keep class org.sqlite.** { *; }</option>
+                                <option>-keep class picocli.** { *; }</option>
+                                <option>-keep class net.java.dev.jna.** { *; }</option>
+                                <option>-keep class com.sun.jna.** { *; }</option>
+                                <option>-keep class ch.qos.logback.** { *; }</option>
+                                <option>-keep class org.slf4j.** { *; }</option>
+                                <!-- Update class names inside service-loader descriptor
+                                     files when obfuscation renames a class. Prevents
+                                     stale META-INF/services/* entries. -->
+                                <option>-adaptresourcefilecontents META-INF/services/**</option>
+
+                                <!-- ── JavaFX — keep all packages intact.
+                                     JavaFX uses SPI, reflection, and FXML introspection
+                                     extensively; renaming or removing ANY class breaks it.
+                                     Classes are bundled via the win-classified deps above. -->
+                                <option>-keep class javafx.** { *; }</option>
+                                <option>-keep class com.sun.javafx.** { *; }</option>
+                                <option>-keep class com.sun.glass.** { *; }</option>
+                                <option>-keep class com.sun.prism.** { *; }</option>
+                                <option>-keep class com.sun.scenario.** { *; }</option>
+                                <option>-keep class com.sun.webkit.** { *; }</option>
+                                <option>-keep class com.sun.media.** { *; }</option>
+                                <option>-keep class com.sun.marlin.** { *; }</option>
+
                                 <!-- ── Provided / bundled libs — suppress missing refs ── -->
                                 <option>-dontwarn javafx.**</option>
+                                <option>-dontwarn com.sun.javafx.**</option>
+                                <option>-dontwarn jdk.jfr.**</option>
                                 <option>-dontwarn picocli.**</option>
                                 <option>-dontwarn org.sqlite.**</option>
                                 <option>-dontwarn org.slf4j.**</option>
                                 <option>-dontwarn ch.qos.logback.**</option>
                                 <option>-dontwarn com.sun.jna.**</option>
+                                <option>-dontwarn org.eclipse.**</option>
+                                <option>-dontwarn org.w3c.**</option>
+                                <!-- Skip linking-pass strict checks against JavaFX internals.
+                                     The shaded launcher jar bundles JavaFX 17 classes whose
+                                     com.sun.javafx.* internals reference jdk.jfr.* which is
+                                     deprecated and not on the strict-input path. -->
+                                <option>-ignorewarnings</option>
 
                                 <!-- ── Source map ───────────────────────────────── -->
                                 <option>-renamesourcefileattribute SourceFile</option>
@@ -229,17 +331,132 @@
 
                                 <option>-dontnote **</option>
                             </options>
+                            <maxMemory>2048m</maxMemory>
                             <libs>
-                                <lib>${java.home}/jmods</lib>
+                                <!-- Individual jmod files — ProGuard 7.9 doesn't reliably
+                                     scan a jmods directory. java.net.http included for
+                                     HttpClient usage in the launcher. -->
+                                <lib>${axiom.proguardJdkHome}/jmods/java.base.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.desktop.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.logging.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.management.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.naming.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.net.http.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.sql.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.xml.jmod</lib>
                             </libs>
                         </configuration>
-                        <dependencies>
-                            <dependency>
-                                <groupId>com.guardsquare</groupId>
-                                <artifactId>proguard-base</artifactId>
-                                <version>7.4.2</version>
-                            </dependency>
-                        </dependencies>
+                        <!-- No <dependencies> override — let proguard-maven-plugin 2.7.0
+                             pull its own matched proguard-base/proguard-core (7.7.0). -->
+
+                    </plugin>
+
+                    <!--
+                        jlink — produce a minimal custom JRE for the installer.
+
+                        Runs in the `verify` phase, AFTER package (which produces the
+                        obfuscated axiom-launcher-${axiom.distVersion}.jar). Outputs
+                        a stripped runtime to target/runtime-image/ and copies the
+                        release jar into target/jpackage-input/ for jpackage.
+
+                        Module list:
+                          java.base/desktop/logging      — core + Swing/AWT for JavaFX bootstrap
+                          java.management/naming/sql/xml — sqlite-jdbc, JNDI, generic XML
+                          java.net.http                  — HttpClient used by AutoUpdater
+                          jdk.crypto.ec                  — EC ciphers for HTTPS (most modern certs)
+                          jdk.unsupported                — sun.misc.Unsafe used transitively
+                          jdk.localedata                 — locale-aware date/number formatting
+                          jdk.zipfs                      — ZIP filesystem (defensive)
+                    -->
+                    <!--
+                        jlink + jpackage via antrun exec.
+
+                        Both tools are invoked from axiom.jpackageHome (defaults to
+                        ${java.home}) so the build JDK can stay at JDK 11 while a
+                        separate JDK 25 installation provides jlink/jpackage:
+
+                            mvn -P release verify
+                                -Daxiom.proguardJdkHome="C:/Program Files/.../jdk-11"
+                                -Daxiom.jpackageHome="C:/Program Files/.../jdk-25"
+
+                        Output: target/dist/Axiom-${axiom.distVersion}.exe
+
+                        Upgrade UUID is hardcoded — DO NOT change between versions;
+                        rebinding the GUID breaks in-place upgrades for existing users.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>jlink-jpackage</id>
+                                <phase>verify</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <!-- Clean previous artefacts.
+                                             dist/ lives outside target/ so Maven's clean
+                                             phase never touches it (avoids Windows Defender
+                                             locking the previous installer EXE during clean). -->
+                                        <delete dir="${project.build.directory}/runtime-image" quiet="true"/>
+                                        <delete dir="${project.basedir}/dist"                  quiet="true"/>
+                                        <delete dir="${project.build.directory}/jpackage-input" quiet="true"/>
+
+                                        <!-- Stage the obfuscated JAR -->
+                                        <mkdir dir="${project.build.directory}/jpackage-input"/>
+                                        <copy file="${project.build.directory}/axiom-launcher-${axiom.distVersion}.jar"
+                                              todir="${project.build.directory}/jpackage-input"
+                                              overwrite="true"/>
+
+                                        <!--
+                                            jlink: build a minimal JRE for the installer.
+                                            Uses axiom.jpackageHome so the JDK 25 binary is
+                                            called even when JAVA_HOME stays at JDK 11.
+                                            No explicit module-path: jlink falls back to the
+                                            JDK's internal lib/modules archive (works on JDKs
+                                            shipped without a jmods/ directory).
+                                        -->
+                                        <exec executable="${axiom.jpackageHome}/bin/jlink"
+                                              failonerror="true">
+                                            <arg value="--add-modules"/>
+                                            <arg value="java.base,java.desktop,java.logging,java.management,java.naming,java.net.http,java.sql,java.xml,jdk.crypto.ec,jdk.unsupported,jdk.localedata,jdk.zipfs"/>
+                                            <arg value="--strip-debug"/>
+                                            <arg value="--no-header-files"/>
+                                            <arg value="--no-man-pages"/>
+                                            <arg value="--compress=zip-6"/>
+                                            <arg value="--output"/>
+                                            <arg value="${project.build.directory}/runtime-image"/>
+                                        </exec>
+
+                                        <!--
+                                            jpackage: produce a per-user Windows EXE installer.
+                                            Requires WiX 3.11 on PATH (candle.exe / light.exe).
+                                        -->
+                                        <exec executable="${axiom.jpackageHome}/bin/jpackage"
+                                              failonerror="true">
+                                            <arg value="--name"/>          <arg value="Axiom"/>
+                                            <arg value="--app-version"/>   <arg value="${axiom.distVersion}"/>
+                                            <arg value="--vendor"/>        <arg value="Axiom"/>
+                                            <arg value="--type"/>          <arg value="exe"/>
+                                            <arg value="--input"/>         <arg value="${project.build.directory}/jpackage-input"/>
+                                            <arg value="--main-jar"/>      <arg value="axiom-launcher-${axiom.distVersion}.jar"/>
+                                            <arg value="--main-class"/>    <arg value="com.axiom.launcher.Main"/>
+                                            <arg value="--runtime-image"/> <arg value="${project.build.directory}/runtime-image"/>
+                                            <arg value="--dest"/>          <arg value="${project.basedir}/dist"/>
+                                            <arg value="--java-options"/>  <arg value="-Dfile.encoding=UTF-8"/>
+                                            <arg value="--win-dir-chooser"/>
+                                            <arg value="--win-menu"/>
+                                            <arg value="--win-menu-group"/>   <arg value="Axiom"/>
+                                            <arg value="--win-per-user-install"/>
+                                            <arg value="--win-shortcut"/>
+                                            <arg value="--win-shortcut-prompt"/>
+                                            <arg value="--win-upgrade-uuid"/> <arg value="9d73bd54-4eb2-4b16-95d0-cb2c21a8265e"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

@@ -169,6 +169,15 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <!--
+                                            Drop module-info.class from the shaded jar.
+                                            ProGuard 7+ chokes on multi-release / module-info
+                                            entries inside a flat shaded jar; this is the most
+                                            common cause of opaque ProGuard failures on Java 11+.
+                                            We don't ship as a JPMS module anyway.
+                                        -->
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
@@ -183,12 +192,19 @@
         <!--
             Release profile — produces an obfuscated axiom-plugin-*-release.jar.
 
-            Usage: mvn clean package -Prelease -DskipTests
+            Usage: mvn clean package -P release [-DskipTests]
 
-            The shade plugin (main build) always runs first and produces the fat JAR.
-            ProGuard then processes that fat JAR in the same 'package' phase.
+            Pipeline (single 'package' phase):
+              1. maven-shade-plugin produces axiom-plugin-1.0-SNAPSHOT.jar (the dev jar).
+              2. proguard-maven-plugin reads that shaded jar and writes
+                 axiom-plugin-1.0-SNAPSHOT-release.jar alongside it, plus
+                 proguard-mapping.txt for de-obfuscating crash reports.
 
-            The debug fat JAR is preserved unchanged; only the -release.jar is obfuscated.
+            The dev jar is preserved unchanged so `mvn package` (no profile) still
+            produces the deployable artefact dev.ps1 picks up.
+
+            Keep rules live in axiom-plugin/proguard.cfg — see comments there for
+            why each rule exists.
         -->
         <profile>
             <id>release</id>
@@ -197,7 +213,7 @@
                     <plugin>
                         <groupId>com.github.wvengen</groupId>
                         <artifactId>proguard-maven-plugin</artifactId>
-                        <version>2.6.0</version>
+                        <version>2.7.0</version>
                         <executions>
                             <execution>
                                 <phase>package</phase>
@@ -205,73 +221,47 @@
                             </execution>
                         </executions>
                         <configuration>
-                            <proguardVersion>7.4.2</proguardVersion>
+                            <!-- Use whatever ProGuard the plugin bundles (7.7.0 in 2.7.0).
+                                 Overriding to 7.9.1 with separate proguard-base/core deps
+                                 conflicts with the plugin's own classloader. -->
+                            <proguardVersion>7.7.0</proguardVersion>
                             <injar>${project.build.finalName}.jar</injar>
-                            <outjar>${project.build.finalName}-release.jar</outjar>
+                            <!--
+                                Clean distribution name — no -SNAPSHOT, no -release
+                                classifier. Driven by axiom.distVersion in the parent pom
+                                so the launcher and plugin stay in lockstep.
+                            -->
+                            <outjar>axiom-plugin-${axiom.distVersion}.jar</outjar>
                             <outputDirectory>${project.build.directory}</outputDirectory>
                             <obfuscate>true</obfuscate>
+                            <attach>false</attach>
+                            <proguardInclude>${project.basedir}/proguard.cfg</proguardInclude>
                             <options>
-                                <!-- ── Entry points RuneLite discovers by reflection ─── -->
-                                <option>-keep public class com.axiom.plugin.AxiomPlugin {
-                                    public *;
-                                }</option>
-
-                                <!-- ── Keep all annotations (ScriptManifest, Subscribe) ─ -->
-                                <option>-keepattributes *Annotation*</option>
-
-                                <!-- ── ScriptLoader finds scripts via @ScriptManifest ─── -->
-                                <option>-keep @com.axiom.api.script.ScriptManifest class * {
-                                    public *;
-                                }</option>
-
-                                <!-- ── ScriptLoader instantiates BotScript subclasses ─── -->
-                                <option>-keep public class * extends com.axiom.api.script.BotScript {
-                                    public *;
-                                }</option>
-
-                                <!-- ── ScriptSettings subclasses passed by type cast ───── -->
-                                <option>-keep public class * extends com.axiom.api.script.ScriptSettings {
-                                    public *;
-                                }</option>
-
-                                <!-- ── Keep full axiom-api public surface ────────────── -->
-                                <option>-keep public class com.axiom.api.** {
-                                    public protected *;
-                                }</option>
-
-                                <!-- ── Keep enum valueOf/values — Java reflection uses them ── -->
-                                <option>-keepclassmembers enum * {
-                                    public static **[] values();
-                                    public static ** valueOf(java.lang.String);
-                                }</option>
-
-                                <!-- ── Provided deps — RuneLite is on the classpath at runtime ── -->
-                                <option>-dontwarn net.runelite.**</option>
-                                <option>-dontwarn lombok.**</option>
-                                <option>-dontwarn org.slf4j.**</option>
-
-                                <!-- ── Source map — strip file names but keep line numbers
-                                         so stack traces can still be de-obfuscated ──────── -->
-                                <option>-renamesourcefileattribute SourceFile</option>
-                                <option>-keepattributes SourceFile,LineNumberTable</option>
-
-                                <!-- ── Mapping file for de-obfuscating crash reports ──── -->
+                                <!-- Mapping file path — tooling-specific so kept here -->
                                 <option>-printmapping ${project.build.directory}/proguard-mapping.txt</option>
-
-                                <!-- ── Suppress noisy notes about duplicate members ────── -->
-                                <option>-dontnote **</option>
+                                <option>-printseeds ${project.build.directory}/proguard-seeds.txt</option>
                             </options>
+                            <maxMemory>2048m</maxMemory>
                             <libs>
-                                <lib>${java.home}/jmods</lib>
+                                <!--
+                                    Java 11+ split rt.jar into per-module jmods. ProGuard accepts
+                                    individual .jmod files as -libraryjars; pointing at the directory
+                                    is unreliable. Listed modules cover everything axiom-api,
+                                    axiom-plugin, and the bundled scripts touch.
+                                -->
+                                <lib>${axiom.proguardJdkHome}/jmods/java.base.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.desktop.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.logging.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.management.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.naming.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.net.http.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.sql.jmod</lib>
+                                <lib>${axiom.proguardJdkHome}/jmods/java.xml.jmod</lib>
                             </libs>
                         </configuration>
-                        <dependencies>
-                            <dependency>
-                                <groupId>com.guardsquare</groupId>
-                                <artifactId>proguard-base</artifactId>
-                                <version>7.4.2</version>
-                            </dependency>
-                        </dependencies>
+                        <!-- No <dependencies> override — let proguard-maven-plugin 2.7.0
+                             pull its own matched proguard-base/proguard-core (7.7.0). -->
+
                     </plugin>
                 </plugins>
             </build>

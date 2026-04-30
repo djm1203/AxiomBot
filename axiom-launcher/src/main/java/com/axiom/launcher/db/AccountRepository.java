@@ -51,8 +51,8 @@ public class AccountRepository
     public List<Account> findAll()
     {
         List<Account> result = new ArrayList<>();
-        try (Statement stmt = Database.getConnection().createStatement();
-             ResultSet rs   = stmt.executeQuery(SELECT_ALL))
+        try (PreparedStatement ps = Database.getConnection().prepareStatement(SELECT_ALL);
+             ResultSet rs         = ps.executeQuery())
         {
             while (rs.next()) result.add(mapRow(rs));
         }

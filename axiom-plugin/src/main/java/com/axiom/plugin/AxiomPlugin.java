@@ -11,7 +11,6 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.EventBus;
-import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -145,8 +144,15 @@ public class AxiomPlugin extends Plugin
      * Fires once on the first LOGGED_IN event after the plugin starts.
      * If the launcher passed {@code -Daxiom.script=<name>}, finds the matching
      * script, retrieves its default settings, and starts it automatically.
+     *
+     * Wired into the EventBus via the explicit Consumer-based registration in
+     * {@link #registerEventHandlers()}. The {@code @Subscribe} annotation was
+     * removed because RuneLite's {@code PluginManager.startPlugin()} also calls
+     * {@code eventBus.register(plugin)} after {@code startUp()}, which uses the
+     * lambda-metafactory path that fails for sideloaded plugins (PluginClassLoader
+     * does not implement PrivateLookupableClassLoader). The Consumer registration
+     * already in place delivers the same event without the warning.
      */
-    @Subscribe
     public void onGameStateChanged(GameStateChanged event)
     {
         if (autoStartFired || event.getGameState() != GameState.LOGGED_IN) return;
